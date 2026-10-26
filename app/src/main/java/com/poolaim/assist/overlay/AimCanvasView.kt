@@ -35,6 +35,8 @@ class AimCanvasView(context: Context) : View(context) {
     var targetBallPos: Vector2D? = null
 
     // Mod Menu Configurable Flags
+    var isMasterOverlayEnabled = true
+    var isCalibrationModeActive = false
     var enablePowerSimulation = true
     var enableBankShots = true
     var enableCueBallPath = true
@@ -109,6 +111,12 @@ class AimCanvasView(context: Context) : View(context) {
         style = Paint.Style.FILL
     }
 
+    private val stopGlowRingPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.STROKE
+        strokeWidth = 2.5f
+        pathEffect = DashPathEffect(floatArrayOf(8f, 8f), 0f)
+    }
+
     private val pocketGlowPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = ContextCompat.getColor(context, R.color.laser_green)
         style = Paint.Style.STROKE
@@ -132,6 +140,39 @@ class AimCanvasView(context: Context) : View(context) {
         strokeWidth = 2f
         style = Paint.Style.STROKE
         pathEffect = DashPathEffect(floatArrayOf(10f, 10f), 0f)
+    }
+
+    // Interactive Calibration Paints
+    private val calibBorderPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = Color.parseColor("#00E5FF") // Laser cyan
+        strokeWidth = 4.5f
+        style = Paint.Style.STROKE
+    }
+
+    private val calibPocketPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = Color.parseColor("#FFD600") // Laser gold
+        strokeWidth = 4f
+        style = Paint.Style.STROKE
+    }
+
+    private val calibPocketFillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = Color.parseColor("#44FFD600")
+        style = Paint.Style.FILL
+    }
+
+    private val calibTextPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = Color.WHITE
+        textSize = 26f
+        typeface = Typeface.DEFAULT_BOLD
+        textAlign = Paint.Align.CENTER
+        setShadowLayer(6f, 0f, 0f, Color.BLACK)
+    }
+
+    private val calibSubTextPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = Color.parseColor("#00E5FF")
+        textSize = 20f
+        textAlign = Paint.Align.CENTER
+        setShadowLayer(4f, 0f, 0f, Color.BLACK)
     }
 
     // Device & Calibration Adjustments (Persistent via SharedPreferences)
@@ -173,10 +214,11 @@ class AimCanvasView(context: Context) : View(context) {
         }
     }
 
-    fun adjustCalibration(dOffsetX: Float, dOffsetY: Float, dScaleX: Float) {
+    fun adjustCalibration(dOffsetX: Float, dOffsetY: Float, dScaleX: Float, dScaleY: Float = 0f) {
         offsetX += dOffsetX
         offsetY += dOffsetY
-        tableScaleX = (tableScaleX + dScaleX).coerceIn(0.80f, 1.25f)
+        tableScaleX = (tableScaleX + dScaleX).coerceIn(0.65f, 1.45f)
+        tableScaleY = (tableScaleY + dScaleY).coerceIn(0.65f, 1.45f)
         saveCalibration()
         if (viewWidth > 0 && viewHeight > 0) {
             recalculateTableBounds(viewWidth, viewHeight)
@@ -282,8 +324,51 @@ class AimCanvasView(context: Context) : View(context) {
         postInvalidate()
     }
 
+    private fun drawCalibrationOverlay(canvas: Canvas) {
+        // 1. Draw outer table border with laser cyan rectangle
+        canvas.drawRect(tableBounds, calibBorderPaint)
+
+        // 2. Center division lines (Axes)
+        canvas.drawLine(tableBounds.left, tableBounds.centerY(), tableBounds.right, tableBounds.centerY(), pocketGuidePaint)
+        canvas.drawLine(tableBounds.centerX(), tableBounds.top, tableBounds.centerX(), tableBounds.bottom, pocketGuidePaint)
+
+        // 3. Highlight 6 pockets with numbers & labels
+        val pocketLabels = arrayOf(
+            "1. جيب علوي يسار",
+            "2. جيب علوي وسط",
+            "3. جيب علوي يمين",
+            "4. جيب سفلي يسار",
+            "5. جيب سفلي وسط",
+            "6. جيب سفلي يمين"
+        )
+
+        for ((i, p) in pockets.withIndex()) {
+            canvas.drawCircle(p.x, p.y, ballRadius * 1.8f, calibPocketFillPaint)
+            canvas.drawCircle(p.x, p.y, ballRadius * 1.8f, calibPocketPaint)
+            canvas.drawCircle(p.x, p.y, 5f, calibPocketPaint)
+
+            val textY = if (i < 3) p.y + ballRadius * 3.2f else p.y - ballRadius * 2.2f
+            val label = if (i < pocketLabels.size) pocketLabels[i] else "P${i + 1}"
+            canvas.drawText(label, p.x, textY, calibTextPaint)
+        }
+
+        // 4. Instructions in table center
+        val cx = tableBounds.centerX()
+        val cy = tableBounds.centerY()
+        canvas.drawText("🎯 وضع معايرة الجيوب وأبعاد الطاولة", cx, cy - 22f, calibTextPaint)
+        canvas.drawText("اضبط العرض والارتفاع والموقع من القائمة لتطابق فتحات الطاولة تماماً", cx, cy + 24f, calibSubTextPaint)
+    }
+
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
+
+        // Master Switch: Stop drawing if disabled
+        if (!isMasterOverlayEnabled) return
+
+        // Interactive Calibration Mode
+        if (isCalibrationModeActive) {
+            drawCalibrationOverlay(canvas)
+        }
 
         // 1. Draw Pockets Rim
         for (p in pockets) {
@@ -376,6 +461,10 @@ class AimCanvasView(context: Context) : View(context) {
                 canvas.drawCircle(targetTrajectory.stopX, targetTrajectory.stopY, ballRadius, targetStopMarkerPaint)
                 stopCenterDotPaint.color = targetTrajectoryPaint.color
                 canvas.drawCircle(targetTrajectory.stopX, targetTrajectory.stopY, 4f, stopCenterDotPaint)
+
+                // Outer halo stopping ring
+                stopGlowRingPaint.color = targetTrajectoryPaint.color
+                canvas.drawCircle(targetTrajectory.stopX, targetTrajectory.stopY, ballRadius * 1.35f, stopGlowRingPaint)
             } else if (enablePocketGlow) {
                 // Neon Double Ring Glow on potted pocket
                 val p = pockets[targetTrajectory.pocketIndex]
@@ -420,11 +509,16 @@ class AimCanvasView(context: Context) : View(context) {
                     canvas.drawCircle(cueTrajectory.stopX, cueTrajectory.stopY, ballRadius, cueStopMarkerPaint)
                     stopCenterDotPaint.color = Color.WHITE
                     canvas.drawCircle(cueTrajectory.stopX, cueTrajectory.stopY, 4f, stopCenterDotPaint)
+
+                    stopGlowRingPaint.color = Color.WHITE
+                    canvas.drawCircle(cueTrajectory.stopX, cueTrajectory.stopY, ballRadius * 1.35f, stopGlowRingPaint)
                 } else {
                     // SCRATCH WARNING: Cue ball enters pocket! Show RED alert!
                     val p = pockets[cueTrajectory.pocketIndex]
                     canvas.drawCircle(p.x, p.y, ballRadius * 1.8f, scratchWarningPaint)
                     canvas.drawCircle(p.x, p.y, ballRadius * 2.5f, scratchWarningPaint)
+                    canvas.drawLine(p.x - 14f, p.y - 14f, p.x + 14f, p.y + 14f, scratchWarningPaint)
+                    canvas.drawLine(p.x - 14f, p.y + 14f, p.x + 14f, p.y - 14f, scratchWarningPaint)
                 }
             }
 

@@ -106,16 +106,57 @@
                 android:layout_height="wrap_content"
                 android:orientation="vertical">
 
+                <!-- 0. MASTER ON / OFF SWITCH (تشغيل/إطفاء المساعد بالكامل) -->
+                <RelativeLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:background="#2E1065"
+                    android:padding="8dp"
+                    android:layout_marginBottom="10dp">
+
+                    <LinearLayout
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical"
+                        android:layout_alignParentStart="true"
+                        android:layout_centerVertical="true">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="🔘 مفتاح التشغيل والإطفاء (ON/OFF)"
+                            android:textColor="@color/laser_cyan"
+                            android:textSize="12sp"
+                            android:textStyle="bold" />
+
+                        <TextView
+                            android:id="@+id/tvMasterStatus"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="الخطوط والثقوب مشتعلة الآن (مفعل)"
+                            android:textColor="#A7F3D0"
+                            android:textSize="10sp" />
+                    </LinearLayout>
+
+                    <androidx.appcompat.widget.SwitchCompat
+                        android:id="@+id/switchMasterAim"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:checked="true"
+                        android:layout_alignParentEnd="true"
+                        android:layout_centerVertical="true" />
+                </RelativeLayout>
+
                 <!-- Feature 1: Dynamic Cue Power Simulation & Stop Circles -->
                 <RelativeLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_marginBottom="6dp">
+                    android:layout_marginBottom="4dp">
 
                     <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="⚡ محاكاة قوة السحب وأماكن التوقف"
+                        android:text="⚡ التنبؤ بجهد الضربة ومواقع التوقف"
                         android:textColor="@color/white"
                         android:textSize="11sp"
                         android:layout_alignParentStart="true"
@@ -129,6 +170,48 @@
                         android:layout_alignParentEnd="true"
                         android:layout_centerVertical="true" />
                 </RelativeLayout>
+
+                <!-- Manual Power Adjustment Stepper -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center"
+                    android:background="#1E293B"
+                    android:padding="4dp"
+                    android:layout_marginBottom="8dp">
+
+                    <TextView
+                        android:id="@+id/btnPowerMinus"
+                        android:layout_width="32dp"
+                        android:layout_height="28dp"
+                        android:text="➖"
+                        android:textColor="@color/white"
+                        android:textSize="12sp"
+                        android:gravity="center"
+                        android:background="#33FFFFFF" />
+
+                    <TextView
+                        android:id="@+id/tvPowerPercent"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="جهد الضربة: 85%"
+                        android:textColor="@color/laser_yellow"
+                        android:textSize="11sp"
+                        android:textStyle="bold"
+                        android:gravity="center" />
+
+                    <TextView
+                        android:id="@+id/btnPowerPlus"
+                        android:layout_width="32dp"
+                        android:layout_height="28dp"
+                        android:text="➕"
+                        android:textColor="@color/white"
+                        android:textSize="12sp"
+                        android:gravity="center"
+                        android:background="#33FFFFFF" />
+                </LinearLayout>
 
                 <!-- Feature 2: Bank Shots (Cushion Rebounds) -->
                 <RelativeLayout
@@ -226,15 +309,32 @@
                         android:layout_centerVertical="true" />
                 </RelativeLayout>
 
-                <!-- DPI & Screen Calibration Section -->
-                <TextView
-                    android:layout_width="wrap_content"
+                <!-- Section: Interactive Calibration Mode Switch -->
+                <RelativeLayout
+                    android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:text="📐 معايرة دقة الطاولة (DPI &amp; Resolution):"
-                    android:textColor="#CBD5E1"
-                    android:textSize="11sp"
-                    android:textStyle="bold"
-                    android:layout_marginBottom="4dp" />
+                    android:background="#1E1B4B"
+                    android:padding="6dp"
+                    android:layout_marginBottom="6dp">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="🎯 وضع معايرة الجيوب ومقاس الطاولة"
+                        android:textColor="@color/laser_yellow"
+                        android:textSize="11sp"
+                        android:textStyle="bold"
+                        android:layout_alignParentStart="true"
+                        android:layout_centerVertical="true" />
+
+                    <androidx.appcompat.widget.SwitchCompat
+                        android:id="@+id/switchCalibrationMode"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:checked="false"
+                        android:layout_alignParentEnd="true"
+                        android:layout_centerVertical="true" />
+                </RelativeLayout>
 
                 <TextView
                     android:id="@+id/tvDisplayInfo"
@@ -248,7 +348,7 @@
                     android:gravity="center"
                     android:layout_marginBottom="6dp" />
 
-                <!-- Calibration Controls: X, Y, Width, Reset -->
+                <!-- Calibration Controls: X, Y D-Pad -->
                 <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
@@ -304,12 +404,13 @@
                         android:background="#33FFFFFF" />
                 </LinearLayout>
 
+                <!-- Dimension Resize: Width & Height -->
                 <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:orientation="horizontal"
                     android:gravity="center"
-                    android:layout_marginBottom="10dp">
+                    android:layout_marginBottom="4dp">
 
                     <TextView
                         android:id="@+id/btnCalibWidthPlus"
@@ -336,16 +437,40 @@
                         android:layout_marginEnd="3dp" />
 
                     <TextView
-                        android:id="@+id/btnCalibReset"
+                        android:id="@+id/btnCalibHeightPlus"
                         android:layout_width="0dp"
                         android:layout_height="28dp"
-                        android:layout_weight="1.3"
-                        android:text="🔄 ضبط تلقائي"
-                        android:textColor="@color/laser_yellow"
+                        android:layout_weight="1"
+                        android:text="➕ ارتفاع"
+                        android:textColor="@color/white"
                         android:textSize="10sp"
                         android:gravity="center"
-                        android:background="#22FFD600" />
+                        android:background="#33FFFFFF"
+                        android:layout_marginEnd="3dp" />
+
+                    <TextView
+                        android:id="@+id/btnCalibHeightMinus"
+                        android:layout_width="0dp"
+                        android:layout_height="28dp"
+                        android:layout_weight="1"
+                        android:text="➖ ارتفاع"
+                        android:textColor="@color/white"
+                        android:textSize="10sp"
+                        android:gravity="center"
+                        android:background="#33FFFFFF" />
                 </LinearLayout>
+
+                <!-- Reset Auto Calibration 2:1 -->
+                <TextView
+                    android:id="@+id/btnCalibReset"
+                    android:layout_width="match_parent"
+                    android:layout_height="28dp"
+                    android:text="🔄 إعادة الضبط التلقائي (نسبة 2:1 المتطابقة)"
+                    android:textColor="@color/laser_yellow"
+                    android:textSize="10sp"
+                    android:gravity="center"
+                    android:background="#22FFD600"
+                    android:layout_marginBottom="10dp" />
 
                 <!-- Laser Color Themes -->
                 <TextView

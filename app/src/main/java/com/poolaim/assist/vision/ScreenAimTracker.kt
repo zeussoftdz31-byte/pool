@@ -17,10 +17,16 @@ import kotlin.math.*
 /**
  * Ultra-fast, high-precision computer vision engine for 8 Ball Pool auto-aim tracking.
  *
- * Automatic Features:
- * 1. Automatic Table Felt Color Sampling (supports any table felt: Green, Blue, Purple, Red).
- * 2. True White Cue Ball Identification (strictly rejects striped balls 9-15 via perimeter saturation checks).
- * 3. 360-Degree Radial Guideline & Cue Stick Angle Tracking with silky smooth interpolation.
+ * Engineered for Rock-Solid Stability:
+ * 1. Automatic Table Felt Color Sampling (supports any felt color: Green, Blue, Red, Purple).
+ * 2. Strict True Cue Ball Locking:
+ *    - Rejects striped balls 9-15 via equatorial color saturation checks.
+ *    - Rejects touch gestures, UI dialogs, and avatars via 360° surrounding felt verification.
+ *    - Spatial hysteresis locking: locks onto the cue ball position while aiming and ignores touches.
+ * 3. Dual-Axis Cue Stick & Guideline Angle Tracking:
+ *    - Detects the forward aim guideline (flanked by felt at ±4px).
+ *    - Detects the backward cue stick (flanked by felt at ±8px).
+ *    - Rejects false rotations when score is below confidence threshold.
  * 4. Ray-march Target Ball Detection (identifies target ball along aim path).
  * 5. Left Rail Power Gauge Metering (tracks cue stick pull-down 0% to 100%).
  */
@@ -50,9 +56,13 @@ class ScreenAimTracker(
     private val captureWidth = 960
     private val captureHeight = 540
 
-    // Cached & smoothed state
-    private var lastCueX = -1f
-    private var lastCueY = -1f
+    // State Tracking & Anchored Locking
+    private var lockedCueX = -1f
+    private var lockedCueY = -1f
+    private var isLockedOnCue = false
+    private var lockFrames = 0
+    private var lostFrames = 0
+
     private var smoothAngle = 0f
     private var smoothPower = 0.85f
     private var isProcessingFrame = false
@@ -189,48 +199,65 @@ class ScreenAimTracker(
         fun isWhitePixel(rgb: IntArray): Boolean {
             val lum = getLuminance(rgb)
             val sat = getSaturation(rgb)
-            return lum > 190f && sat < 0.15f
-        }
-
-        fun isTrueCueBall(cx: Float, cy: Float, radius: Float): Boolean {
-            var coloredPoints = 0
-            val perimeterSamples = 16
-            val piF = Math.PI.toFloat()
-
-            for (i in 0 until perimeterSamples) {
-                val angle = i * (2f * piF) / perimeterSamples
-                val px = (cx + radius * 0.88f * cos(angle.toDouble()).toFloat()).toInt()
-                val py = (cy + radius * 0.88f * sin(angle.toDouble()).toFloat()).toInt()
-                val rgb = getPixelRgb(px, py)
-                val sat = getSaturation(rgb)
-
-                if (sat > 0.30f) {
-                    coloredPoints++
-                }
-            }
-
-            return coloredPoints == 0
+            return lum > 185f && sat < 0.16f
         }
 
         val ballRadiusEst = width * 0.0145f // ~14px in 960x540
+        val piF = Math.PI.toFloat()
+
+        /**
+         * Validates that candidate center (cx, cy) is a genuine white cue ball:
+         * 1. Equatorial perimeter has no colored stripes (rejects balls 9 to 15).
+         * 2. Outer perimeter (1.45R) is surrounded by table felt (rejects UI buttons, avatars, touches).
+         */
+        fun isTrueCueBall(cx: Float, cy: Float, radius: Float): Boolean {
+            // A. Check for absence of colored stripe
+            var coloredPoints = 0
+            val perimeterSamples = 16
+            for (i in 0 until perimeterSamples) {
+                val angle = i * (2f * piF) / perimeterSamples
+                val px = (cx + radius * 0.85f * cos(angle.toDouble()).toFloat()).toInt()
+                val py = (cy + radius * 0.85f * sin(angle.toDouble()).toFloat()).toInt()
+                val rgb = getPixelRgb(px, py)
+                val sat = getSaturation(rgb)
+                if (sat > 0.28f) {
+                    coloredPoints++
+                }
+            }
+            if (coloredPoints > 1) return false
+
+            // B. Check that object is resting on table felt (rejects menus, chalk, chat, fingers)
+            var feltSurroundPoints = 0
+            val surroundSamples = 12
+            for (i in 0 until surroundSamples) {
+                val angle = i * (2f * piF) / surroundSamples
+                val px = (cx + radius * 1.45f * cos(angle.toDouble()).toFloat()).toInt()
+                val py = (cy + radius * 1.45f * sin(angle.toDouble()).toFloat()).toInt()
+                if (isFeltPixel(getPixelRgb(px, py))) {
+                    feltSurroundPoints++
+                }
+            }
+
+            return feltSurroundPoints >= 7
+        }
 
         // ==========================================
-        // 2. Locate White Cue Ball (Stationary Turn Detection)
+        // 2. Locate & Lock Cue Ball with Hysteresis
         // ==========================================
         var detectedCueX = -1f
         var detectedCueY = -1f
 
-        // Fast check on cached cue ball location
-        if (lastCueX > 0 && lastCueY > 0) {
-            val searchRadius = (ballRadiusEst * 2.2f).toInt()
+        if (isLockedOnCue && lockedCueX > 0 && lockedCueY > 0) {
+            // Search in tight neighborhood (+-22px) around locked cue ball
+            val searchRadius = (ballRadiusEst * 1.6f).toInt()
             var sumX = 0f
             var sumY = 0f
             var count = 0
 
-            val startX = (lastCueX - searchRadius).toInt().coerceIn(tableStartX, tableEndX)
-            val endX = (lastCueX + searchRadius).toInt().coerceIn(tableStartX, tableEndX)
-            val startY = (lastCueY - searchRadius).toInt().coerceIn(tableStartY, tableEndY)
-            val endY = (lastCueY + searchRadius).toInt().coerceIn(tableStartY, tableEndY)
+            val startX = (lockedCueX - searchRadius).toInt().coerceIn(tableStartX, tableEndX)
+            val endX = (lockedCueX + searchRadius).toInt().coerceIn(tableStartX, tableEndX)
+            val startY = (lockedCueY - searchRadius).toInt().coerceIn(tableStartY, tableEndY)
+            val endY = (lockedCueY + searchRadius).toInt().coerceIn(tableStartY, tableEndY)
 
             for (y in startY..endY step 2) {
                 for (x in startX..endX step 2) {
@@ -242,24 +269,42 @@ class ScreenAimTracker(
                 }
             }
 
-            if (count in 15..280) {
+            if (count in 14..280) {
                 val candidateX = sumX / count
                 val candidateY = sumY / count
                 if (isTrueCueBall(candidateX, candidateY, ballRadiusEst)) {
-                    detectedCueX = candidateX
-                    detectedCueY = candidateY
+                    // Smooth micro-anchor to eliminate jitter
+                    lockedCueX += (candidateX - lockedCueX) * 0.18f
+                    lockedCueY += (candidateY - lockedCueY) * 0.18f
+                    detectedCueX = lockedCueX
+                    detectedCueY = lockedCueY
+                    lostFrames = 0
+                    lockFrames++
+                } else {
+                    lostFrames++
                 }
+            } else {
+                lostFrames++
+            }
+
+            // Keep lock for up to 14 missing frames (e.g. finger/cue momentarily over cue ball)
+            if (lostFrames in 1..14) {
+                detectedCueX = lockedCueX
+                detectedCueY = lockedCueY
+            } else if (lostFrames > 14) {
+                isLockedOnCue = false
+                lockFrames = 0
             }
         }
 
-        // Full table scan if fast cache search missed
-        if (detectedCueX < 0) {
+        // Full table scan if not locked
+        if (!isLockedOnCue) {
             var bestScore = -1f
             var bestCenterX = -1f
             var bestCenterY = -1f
 
-            for (y in tableStartY until tableEndY step 5) {
-                for (x in tableStartX until tableEndX step 5) {
+            for (y in tableStartY until tableEndY step 4) {
+                for (x in tableStartX until tableEndX step 4) {
                     val rgb = getPixelRgb(x, y)
                     if (isWhitePixel(rgb)) {
                         var clusterCount = 0
@@ -297,69 +342,97 @@ class ScreenAimTracker(
             }
 
             if (bestScore > 0) {
+                lockedCueX = bestCenterX
+                lockedCueY = bestCenterY
                 detectedCueX = bestCenterX
                 detectedCueY = bestCenterY
+                isLockedOnCue = true
+                lostFrames = 0
+                lockFrames = 1
             }
         }
 
-        if (detectedCueX > 0 && detectedCueY > 0) {
-            lastCueX = detectedCueX
-            lastCueY = detectedCueY
-        } else if (lastCueX > 0) {
-            detectedCueX = lastCueX
-            detectedCueY = lastCueY
-        } else {
+        // If no cue ball can be locked, do not emit spurious data
+        if (detectedCueX <= 0 || detectedCueY <= 0) {
             return
         }
 
         // ==========================================
-        // 3. Detect In-Game Aim Guideline & Cue Stick Angle (360° Scan)
+        // 3. Dual-Axis Cue Stick & Guideline Angle Tracking (360° Scan)
         // ==========================================
-        val ringRadiusInner = ballRadiusEst * 2.2f
-        val ringRadiusOuter = ballRadiusEst * 4.2f
-
-        var maxLineContrast = -1f
-        var detectedAngle = smoothAngle
+        // Forward guideline is at angle theta (flanked by felt at +-4px)
+        // Cue stick is at angle theta + pi (flanked by felt at +-8px)
         val angleSamples = 120 // 3-degree resolution
+        var bestAngleScore = -1f
+        var detectedAngle = smoothAngle
 
         for (i in 0 until angleSamples) {
-            val angle = (i * (2f * Math.PI.toFloat()) / angleSamples)
-            val cosA = cos(angle)
-            val sinA = sin(angle)
+            val theta = i * (2f * piF) / angleSamples
+            val cosT = cos(theta.toDouble()).toFloat()
+            val sinT = sin(theta.toDouble()).toFloat()
 
-            var lineContrastSum = 0f
-            val sampleSteps = 5
-            for (s in 1..sampleSteps) {
-                val r = ringRadiusInner + (ringRadiusOuter - ringRadiusInner) * (s.toFloat() / sampleSteps)
-                val sx = (detectedCueX + r * cosA).toInt()
-                val sy = (detectedCueY + r * sinA).toInt()
-                val rgb = getPixelRgb(sx, sy)
+            // Perpendicular unit vector (-sin, cos)
+            val perpX = -sinT
+            val perpY = cosT
 
-                // Aim guideline is high contrast against table felt
-                val dr = abs(rgb[0] - feltR)
-                val dg = abs(rgb[1] - feltG)
-                val db = abs(rgb[2] - feltB)
-                val contrast = dr + dg + db
+            var forwardGuidelineScore = 0f
+            var backwardCueStickScore = 0f
 
-                // Guideline is bright white or glowing laser
-                if (isWhitePixel(rgb) || contrast > 75) {
-                    lineContrastSum += contrast
+            // A. Forward Guideline Check: 3 radial points along forward ray
+            for (step in 1..3) {
+                val distFwd = ballRadiusEst * (1.8f + step * 0.9f)
+                val fx = (detectedCueX + distFwd * cosT).toInt()
+                val fy = (detectedCueY + distFwd * sinT).toInt()
+
+                val centerRgb = getPixelRgb(fx, fy)
+                val dr = abs(centerRgb[0] - feltR)
+                val dg = abs(centerRgb[1] - feltG)
+                val db = abs(centerRgb[2] - feltB)
+                val centerContrast = dr + dg + db
+
+                if (isWhitePixel(centerRgb) || centerContrast > 65) {
+                    // Guideline must be thin: verify felt flanks at +-4px
+                    val leftRgb = getPixelRgb((fx - 4 * perpX).toInt(), (fy - 4 * perpY).toInt())
+                    val rightRgb = getPixelRgb((fx + 4 * perpX).toInt(), (fy + 4 * perpY).toInt())
+                    if (isFeltPixel(leftRgb) && isFeltPixel(rightRgb)) {
+                        forwardGuidelineScore += 1.0f
+                    }
                 }
             }
 
-            if (lineContrastSum > maxLineContrast) {
-                maxLineContrast = lineContrastSum
-                detectedAngle = angle
+            // B. Backward Cue Stick Check: 4 radial points behind cue ball
+            for (step in 1..4) {
+                val distBack = ballRadiusEst * (2.8f + step * 1.2f)
+                val bx = (detectedCueX - distBack * cosT).toInt()
+                val by = (detectedCueY - distBack * sinT).toInt()
+
+                val stickCenterRgb = getPixelRgb(bx, by)
+                // Cue stick body is non-felt
+                if (!isFeltPixel(stickCenterRgb)) {
+                    // Cue stick is flanked by felt at +-8px
+                    val leftRgb = getPixelRgb((bx - 8 * perpX).toInt(), (by - 8 * perpY).toInt())
+                    val rightRgb = getPixelRgb((bx + 8 * perpX).toInt(), (by + 8 * perpY).toInt())
+                    if (isFeltPixel(leftRgb) && isFeltPixel(rightRgb)) {
+                        backwardCueStickScore += 1.2f
+                    }
+                }
+            }
+
+            val totalScore = forwardGuidelineScore + backwardCueStickScore
+            if (totalScore > bestAngleScore) {
+                bestAngleScore = totalScore
+                detectedAngle = theta
             }
         }
 
-        // Silky smooth angular interpolation (handles wrap-around)
-        if (maxLineContrast > 80f) {
-            val piF = Math.PI.toFloat()
+        // Strict Confidence Threshold: Ignore false touch motions if no cue stick / line is seen
+        if (bestAngleScore >= 3.2f) {
             var diff = detectedAngle - smoothAngle
             while (diff < -piF) diff += (2f * piF)
             while (diff > piF) diff -= (2f * piF)
-            smoothAngle += diff * 0.40f
+            smoothAngle += diff * 0.35f
+            while (smoothAngle < -piF) smoothAngle += (2f * piF)
+            while (smoothAngle > piF) smoothAngle -= (2f * piF)
         }
 
         // ==========================================
@@ -367,8 +440,8 @@ class ScreenAimTracker(
         // ==========================================
         var targetBallX: Float? = null
         var targetBallY: Float? = null
-        val rayCos = cos(smoothAngle)
-        val raySin = sin(smoothAngle)
+        val rayCos = cos(smoothAngle.toDouble()).toFloat()
+        val raySin = sin(smoothAngle.toDouble()).toFloat()
 
         val maxMarchDistance = (width * 0.72f).toInt()
         var march = (ballRadiusEst * 2.5f).toInt()
@@ -432,7 +505,7 @@ class ScreenAimTracker(
         val targetPower = if (rawPowerRatio > 0.12f) {
             rawPowerRatio.coerceIn(0.20f, 1.0f)
         } else {
-            0.85f // Default full power if idle
+            0.85f // Default power if idle
         }
         smoothPower += (targetPower - smoothPower) * 0.25f
 
@@ -460,8 +533,6 @@ class ScreenAimTracker(
             targetBallPos = realTargetPos
         )
     }
-
-
 
     fun stop() {
         try {

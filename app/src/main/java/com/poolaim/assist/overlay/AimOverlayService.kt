@@ -5,6 +5,7 @@ import android.app.*
 import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
+import android.graphics.Color
 import android.graphics.PixelFormat
 import android.hardware.Sensor
 import android.hardware.SensorEvent
@@ -252,6 +253,55 @@ class AimOverlayService : Service(), SensorEventListener {
                 layoutCollapsedBadge?.visibility = View.VISIBLE
             }
 
+            val switchMasterAim = modMenuView?.findViewById<SwitchCompat>(R.id.switchMasterAim)
+            val tvMasterStatus = modMenuView?.findViewById<TextView>(R.id.tvMasterStatus)
+            val switchCalibrationMode = modMenuView?.findViewById<SwitchCompat>(R.id.switchCalibrationMode)
+
+            val btnPowerMinus = modMenuView?.findViewById<View>(R.id.btnPowerMinus)
+            val btnPowerPlus = modMenuView?.findViewById<View>(R.id.btnPowerPlus)
+            val tvPowerPercent = modMenuView?.findViewById<TextView>(R.id.tvPowerPercent)
+
+            // Master ON/OFF Switch
+            switchMasterAim?.setOnCheckedChangeListener { _, isChecked ->
+                canvasView?.let {
+                    it.isMasterOverlayEnabled = isChecked
+                    it.postInvalidate()
+                }
+                aimTracker?.isAutoTrackingEnabled = isChecked
+                if (isChecked) {
+                    tvMasterStatus?.text = "الخطوط والثقوب مشتعلة الآن (مفعل)"
+                    tvMasterStatus?.setTextColor(Color.parseColor("#A7F3D0"))
+                } else {
+                    tvMasterStatus?.text = "المساعد مطفأ مؤقتاً (متوقف)"
+                    tvMasterStatus?.setTextColor(Color.parseColor("#F87171"))
+                }
+            }
+
+            // Interactive Calibration Mode
+            switchCalibrationMode?.setOnCheckedChangeListener { _, isChecked ->
+                canvasView?.let {
+                    it.isCalibrationModeActive = isChecked
+                    it.postInvalidate()
+                }
+            }
+
+            // Power Steppers
+            btnPowerMinus?.setOnClickListener {
+                canvasView?.let {
+                    it.shotPowerPercent = (it.shotPowerPercent - 0.05f).coerceIn(0.15f, 1.0f)
+                    tvPowerPercent?.text = "جهد الضربة: ${(it.shotPowerPercent * 100).toInt()}%"
+                    it.postInvalidate()
+                }
+            }
+
+            btnPowerPlus?.setOnClickListener {
+                canvasView?.let {
+                    it.shotPowerPercent = (it.shotPowerPercent + 0.05f).coerceIn(0.15f, 1.0f)
+                    tvPowerPercent?.text = "جهد الضربة: ${(it.shotPowerPercent * 100).toInt()}%"
+                    it.postInvalidate()
+                }
+            }
+
             // Mod Menu Feature Toggles
             switchPowerSimulation?.setOnCheckedChangeListener { _, isChecked ->
                 canvasView?.let {
@@ -303,14 +353,18 @@ class AimOverlayService : Service(), SensorEventListener {
             val btnCalibDown = modMenuView?.findViewById<View>(R.id.btnCalibDown)
             val btnCalibWidthPlus = modMenuView?.findViewById<View>(R.id.btnCalibWidthPlus)
             val btnCalibWidthMinus = modMenuView?.findViewById<View>(R.id.btnCalibWidthMinus)
+            val btnCalibHeightPlus = modMenuView?.findViewById<View>(R.id.btnCalibHeightPlus)
+            val btnCalibHeightMinus = modMenuView?.findViewById<View>(R.id.btnCalibHeightMinus)
             val btnCalibReset = modMenuView?.findViewById<View>(R.id.btnCalibReset)
 
-            btnCalibLeft?.setOnClickListener { canvasView?.adjustCalibration(-3f, 0f, 0f) }
-            btnCalibRight?.setOnClickListener { canvasView?.adjustCalibration(3f, 0f, 0f) }
-            btnCalibUp?.setOnClickListener { canvasView?.adjustCalibration(0f, -3f, 0f) }
-            btnCalibDown?.setOnClickListener { canvasView?.adjustCalibration(0f, 3f, 0f) }
-            btnCalibWidthPlus?.setOnClickListener { canvasView?.adjustCalibration(0f, 0f, 0.005f) }
-            btnCalibWidthMinus?.setOnClickListener { canvasView?.adjustCalibration(0f, 0f, -0.005f) }
+            btnCalibLeft?.setOnClickListener { canvasView?.adjustCalibration(-4f, 0f, 0f, 0f) }
+            btnCalibRight?.setOnClickListener { canvasView?.adjustCalibration(4f, 0f, 0f, 0f) }
+            btnCalibUp?.setOnClickListener { canvasView?.adjustCalibration(0f, -4f, 0f, 0f) }
+            btnCalibDown?.setOnClickListener { canvasView?.adjustCalibration(0f, 4f, 0f, 0f) }
+            btnCalibWidthPlus?.setOnClickListener { canvasView?.adjustCalibration(0f, 0f, 0.008f, 0f) }
+            btnCalibWidthMinus?.setOnClickListener { canvasView?.adjustCalibration(0f, 0f, -0.008f, 0f) }
+            btnCalibHeightPlus?.setOnClickListener { canvasView?.adjustCalibration(0f, 0f, 0f, 0.008f) }
+            btnCalibHeightMinus?.setOnClickListener { canvasView?.adjustCalibration(0f, 0f, 0f, -0.008f) }
             btnCalibReset?.setOnClickListener {
                 canvasView?.resetCalibration()
                 Toast.makeText(this, "تمت إعادة الضبط التلقائي للطاولة", Toast.LENGTH_SHORT).show()
@@ -369,6 +423,20 @@ class AimOverlayService : Service(), SensorEventListener {
         overlayVisible = !overlayVisible
         val vis = if (overlayVisible) View.VISIBLE else View.GONE
         canvasView?.visibility = vis
+        canvasView?.isMasterOverlayEnabled = overlayVisible
+        aimTracker?.isAutoTrackingEnabled = overlayVisible
+
+        val switchMasterAim = modMenuView?.findViewById<SwitchCompat>(R.id.switchMasterAim)
+        val tvMasterStatus = modMenuView?.findViewById<TextView>(R.id.tvMasterStatus)
+        switchMasterAim?.isChecked = overlayVisible
+        if (overlayVisible) {
+            tvMasterStatus?.text = "الخطوط والثقوب مشتعلة الآن (مفعل)"
+            tvMasterStatus?.setTextColor(Color.parseColor("#A7F3D0"))
+        } else {
+            tvMasterStatus?.text = "المساعد مطفأ مؤقتاً (متوقف)"
+            tvMasterStatus?.setTextColor(Color.parseColor("#F87171"))
+        }
+        canvasView?.postInvalidate()
     }
 
     private fun vibrateFeedback() {
