@@ -357,17 +357,51 @@ class AimOverlayService : Service(), SensorEventListener {
             val btnCalibHeightMinus = modMenuView?.findViewById<View>(R.id.btnCalibHeightMinus)
             val btnCalibReset = modMenuView?.findViewById<View>(R.id.btnCalibReset)
 
-            btnCalibLeft?.setOnClickListener { canvasView?.adjustCalibration(-4f, 0f, 0f, 0f) }
-            btnCalibRight?.setOnClickListener { canvasView?.adjustCalibration(4f, 0f, 0f, 0f) }
-            btnCalibUp?.setOnClickListener { canvasView?.adjustCalibration(0f, -4f, 0f, 0f) }
-            btnCalibDown?.setOnClickListener { canvasView?.adjustCalibration(0f, 4f, 0f, 0f) }
-            btnCalibWidthPlus?.setOnClickListener { canvasView?.adjustCalibration(0f, 0f, 0.008f, 0f) }
-            btnCalibWidthMinus?.setOnClickListener { canvasView?.adjustCalibration(0f, 0f, -0.008f, 0f) }
-            btnCalibHeightPlus?.setOnClickListener { canvasView?.adjustCalibration(0f, 0f, 0f, 0.008f) }
-            btnCalibHeightMinus?.setOnClickListener { canvasView?.adjustCalibration(0f, 0f, 0f, -0.008f) }
+            val btnCalibTableZoomIn = modMenuView?.findViewById<View>(R.id.btnCalibTableZoomIn)
+            val btnCalibTableZoomOut = modMenuView?.findViewById<View>(R.id.btnCalibTableZoomOut)
+            val btnCalibPocketMinus = modMenuView?.findViewById<View>(R.id.btnCalibPocketMinus)
+            val btnCalibPocketPlus = modMenuView?.findViewById<View>(R.id.btnCalibPocketPlus)
+            val tvPocketSize = modMenuView?.findViewById<TextView>(R.id.tvPocketSize)
+
+            canvasView?.let {
+                tvPocketSize?.text = "🕳️ حجم الثقوب: ${(it.pocketScale * 100).toInt()}%"
+            }
+
+            btnCalibLeft?.setOnClickListener { canvasView?.adjustCalibration(-4f, 0f, 0f, 0f, 0f) }
+            btnCalibRight?.setOnClickListener { canvasView?.adjustCalibration(4f, 0f, 0f, 0f, 0f) }
+            btnCalibUp?.setOnClickListener { canvasView?.adjustCalibration(0f, -4f, 0f, 0f, 0f) }
+            btnCalibDown?.setOnClickListener { canvasView?.adjustCalibration(0f, 4f, 0f, 0f, 0f) }
+            btnCalibWidthPlus?.setOnClickListener { canvasView?.adjustCalibration(0f, 0f, 0.008f, 0f, 0f) }
+            btnCalibWidthMinus?.setOnClickListener { canvasView?.adjustCalibration(0f, 0f, -0.008f, 0f, 0f) }
+            btnCalibHeightPlus?.setOnClickListener { canvasView?.adjustCalibration(0f, 0f, 0f, 0.008f, 0f) }
+            btnCalibHeightMinus?.setOnClickListener { canvasView?.adjustCalibration(0f, 0f, 0f, -0.008f, 0f) }
+
+            // Table Zoom In / Zoom Out (Proportional 2:1)
+            btnCalibTableZoomIn?.setOnClickListener {
+                canvasView?.adjustCalibration(0f, 0f, 0.012f, 0.012f, 0f)
+            }
+            btnCalibTableZoomOut?.setOnClickListener {
+                canvasView?.adjustCalibration(0f, 0f, -0.012f, -0.012f, 0f)
+            }
+
+            // Pocket Size Scaling
+            btnCalibPocketMinus?.setOnClickListener {
+                canvasView?.let {
+                    it.adjustCalibration(0f, 0f, 0f, 0f, -0.05f)
+                    tvPocketSize?.text = "🕳️ حجم الثقوب: ${(it.pocketScale * 100).toInt()}%"
+                }
+            }
+            btnCalibPocketPlus?.setOnClickListener {
+                canvasView?.let {
+                    it.adjustCalibration(0f, 0f, 0f, 0f, 0.05f)
+                    tvPocketSize?.text = "🕳️ حجم الثقوب: ${(it.pocketScale * 100).toInt()}%"
+                }
+            }
+
             btnCalibReset?.setOnClickListener {
                 canvasView?.resetCalibration()
-                Toast.makeText(this, "تمت إعادة الضبط التلقائي للطاولة", Toast.LENGTH_SHORT).show()
+                tvPocketSize?.text = "🕳️ حجم الثقوب: 100%"
+                Toast.makeText(this, "تمت إعادة الضبط التلقائي للطاولة والجيوب", Toast.LENGTH_SHORT).show()
             }
 
             // Laser Color Themes

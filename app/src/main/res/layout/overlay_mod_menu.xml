@@ -460,6 +460,79 @@
                         android:background="#33FFFFFF" />
                 </LinearLayout>
 
+                <!-- Table Scale Zoom In / Zoom Out (2:1 Proportional) -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center"
+                    android:layout_marginBottom="4dp">
+
+                    <TextView
+                        android:id="@+id/btnCalibTableZoomIn"
+                        android:layout_width="0dp"
+                        android:layout_height="28dp"
+                        android:layout_weight="1"
+                        android:text="🔍➕ تكبير الطاولة"
+                        android:textColor="@color/white"
+                        android:textSize="10sp"
+                        android:gravity="center"
+                        android:background="#2E2055"
+                        android:layout_marginEnd="4dp" />
+
+                    <TextView
+                        android:id="@+id/btnCalibTableZoomOut"
+                        android:layout_width="0dp"
+                        android:layout_height="28dp"
+                        android:layout_weight="1"
+                        android:text="🔍➖ تصغير الطاولة"
+                        android:textColor="@color/white"
+                        android:textSize="10sp"
+                        android:gravity="center"
+                        android:background="#2E2055" />
+                </LinearLayout>
+
+                <!-- Pocket Size Stepper (تكبير وتصغير حجم الثقوب) -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center"
+                    android:layout_marginBottom="6dp">
+
+                    <TextView
+                        android:id="@+id/btnCalibPocketMinus"
+                        android:layout_width="32dp"
+                        android:layout_height="28dp"
+                        android:text="➖"
+                        android:textColor="@color/white"
+                        android:textSize="12sp"
+                        android:gravity="center"
+                        android:background="#33FFFFFF" />
+
+                    <TextView
+                        android:id="@+id/tvPocketSize"
+                        android:layout_width="0dp"
+                        android:layout_height="28dp"
+                        android:layout_weight="1"
+                        android:text="🕳️ حجم الثقوب: 100%"
+                        android:textColor="@color/laser_yellow"
+                        android:textSize="10sp"
+                        android:textStyle="bold"
+                        android:gravity="center"
+                        android:background="#1E293B" />
+
+                    <TextView
+                        android:id="@+id/btnCalibPocketPlus"
+                        android:layout_width="32dp"
+                        android:layout_height="28dp"
+                        android:text="➕"
+                        android:textColor="@color/white"
+                        android:textSize="12sp"
+                        android:gravity="center"
+                        android:background="#33FFFFFF" />
+                </LinearLayout>
+
                 <!-- Reset Auto Calibration 2:1 -->
                 <TextView
                     android:id="@+id/btnCalibReset"

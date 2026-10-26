@@ -180,6 +180,7 @@ class AimCanvasView(context: Context) : View(context) {
     var offsetY = 0f
     var tableScaleX = 1.0f
     var tableScaleY = 1.0f
+    var pocketScale = 1.0f
 
     private var viewWidth = 0
     private var viewHeight = 0
@@ -195,6 +196,7 @@ class AimCanvasView(context: Context) : View(context) {
             offsetY = prefs.getFloat("offset_y", 0f)
             tableScaleX = prefs.getFloat("scale_x", 1.0f)
             tableScaleY = prefs.getFloat("scale_y", 1.0f)
+            pocketScale = prefs.getFloat("pocket_scale", 1.0f)
         } catch (e: Exception) {
             e.printStackTrace()
         }
@@ -208,17 +210,25 @@ class AimCanvasView(context: Context) : View(context) {
                 .putFloat("offset_y", offsetY)
                 .putFloat("scale_x", tableScaleX)
                 .putFloat("scale_y", tableScaleY)
+                .putFloat("pocket_scale", pocketScale)
                 .apply()
         } catch (e: Exception) {
             e.printStackTrace()
         }
     }
 
-    fun adjustCalibration(dOffsetX: Float, dOffsetY: Float, dScaleX: Float, dScaleY: Float = 0f) {
+    fun adjustCalibration(
+        dOffsetX: Float,
+        dOffsetY: Float,
+        dScaleX: Float,
+        dScaleY: Float = 0f,
+        dPocketScale: Float = 0f
+    ) {
         offsetX += dOffsetX
         offsetY += dOffsetY
-        tableScaleX = (tableScaleX + dScaleX).coerceIn(0.65f, 1.45f)
-        tableScaleY = (tableScaleY + dScaleY).coerceIn(0.65f, 1.45f)
+        tableScaleX = (tableScaleX + dScaleX).coerceIn(0.50f, 1.60f)
+        tableScaleY = (tableScaleY + dScaleY).coerceIn(0.50f, 1.60f)
+        pocketScale = (pocketScale + dPocketScale).coerceIn(0.50f, 1.80f)
         saveCalibration()
         if (viewWidth > 0 && viewHeight > 0) {
             recalculateTableBounds(viewWidth, viewHeight)
@@ -230,6 +240,7 @@ class AimCanvasView(context: Context) : View(context) {
         offsetY = 0f
         tableScaleX = 1.0f
         tableScaleY = 1.0f
+        pocketScale = 1.0f
         saveCalibration()
         if (viewWidth > 0 && viewHeight > 0) {
             recalculateTableBounds(viewWidth, viewHeight)
@@ -342,12 +353,13 @@ class AimCanvasView(context: Context) : View(context) {
             "6. جيب سفلي يمين"
         )
 
+        val calibPocketRadius = ballRadius * 1.8f * pocketScale
         for ((i, p) in pockets.withIndex()) {
-            canvas.drawCircle(p.x, p.y, ballRadius * 1.8f, calibPocketFillPaint)
-            canvas.drawCircle(p.x, p.y, ballRadius * 1.8f, calibPocketPaint)
+            canvas.drawCircle(p.x, p.y, calibPocketRadius, calibPocketFillPaint)
+            canvas.drawCircle(p.x, p.y, calibPocketRadius, calibPocketPaint)
             canvas.drawCircle(p.x, p.y, 5f, calibPocketPaint)
 
-            val textY = if (i < 3) p.y + ballRadius * 3.2f else p.y - ballRadius * 2.2f
+            val textY = if (i < 3) p.y + calibPocketRadius + 22f else p.y - calibPocketRadius - 10f
             val label = if (i < pocketLabels.size) pocketLabels[i] else "P${i + 1}"
             canvas.drawText(label, p.x, textY, calibTextPaint)
         }
@@ -356,7 +368,7 @@ class AimCanvasView(context: Context) : View(context) {
         val cx = tableBounds.centerX()
         val cy = tableBounds.centerY()
         canvas.drawText("🎯 وضع معايرة الجيوب وأبعاد الطاولة", cx, cy - 22f, calibTextPaint)
-        canvas.drawText("اضبط العرض والارتفاع والموقع من القائمة لتطابق فتحات الطاولة تماماً", cx, cy + 24f, calibSubTextPaint)
+        canvas.drawText("اضبط العرض والارتفاع وحجم الثقوب لتطابق فتحات اللعبة تماماً", cx, cy + 24f, calibSubTextPaint)
     }
 
     override fun onDraw(canvas: Canvas) {
@@ -370,9 +382,9 @@ class AimCanvasView(context: Context) : View(context) {
             drawCalibrationOverlay(canvas)
         }
 
-        // 1. Draw Pockets Rim
+        // 1. Draw Pockets Rim (Scales with table and pocketScale)
         for (p in pockets) {
-            canvas.drawCircle(p.x, p.y, ballRadius * 1.5f, pocketMarkerPaint)
+            canvas.drawCircle(p.x, p.y, ballRadius * 1.5f * pocketScale, pocketMarkerPaint)
         }
 
         val dirX = cos(aimAngleRad.toDouble()).toFloat()
@@ -443,7 +455,8 @@ class AimCanvasView(context: Context) : View(context) {
                 tableRight = tableBounds.right,
                 tableBottom = tableBounds.bottom,
                 ballRadius = ballRadius,
-                pockets = pockets
+                pockets = pockets,
+                pocketScale = pocketScale
             )
 
             // Render Target Ball Segments
@@ -468,8 +481,8 @@ class AimCanvasView(context: Context) : View(context) {
             } else if (enablePocketGlow) {
                 // Neon Double Ring Glow on potted pocket
                 val p = pockets[targetTrajectory.pocketIndex]
-                canvas.drawCircle(p.x, p.y, ballRadius * 1.6f, pocketGlowPaint)
-                canvas.drawCircle(p.x, p.y, ballRadius * 2.3f, pocketGlowPaint)
+                canvas.drawCircle(p.x, p.y, ballRadius * 1.6f * pocketScale, pocketGlowPaint)
+                canvas.drawCircle(p.x, p.y, ballRadius * 2.3f * pocketScale, pocketGlowPaint)
             }
 
             // 2. Trace & Render Cue Ball Tangent Deflection (مسار الكرة البيضاء ومكان توقفها)
@@ -497,7 +510,8 @@ class AimCanvasView(context: Context) : View(context) {
                     tableRight = tableBounds.right,
                     tableBottom = tableBounds.bottom,
                     ballRadius = ballRadius,
-                    pockets = pockets
+                    pockets = pockets,
+                    pocketScale = pocketScale
                 )
 
                 for (seg in cueTrajectory.segments) {
@@ -515,8 +529,8 @@ class AimCanvasView(context: Context) : View(context) {
                 } else {
                     // SCRATCH WARNING: Cue ball enters pocket! Show RED alert!
                     val p = pockets[cueTrajectory.pocketIndex]
-                    canvas.drawCircle(p.x, p.y, ballRadius * 1.8f, scratchWarningPaint)
-                    canvas.drawCircle(p.x, p.y, ballRadius * 2.5f, scratchWarningPaint)
+                    canvas.drawCircle(p.x, p.y, ballRadius * 1.8f * pocketScale, scratchWarningPaint)
+                    canvas.drawCircle(p.x, p.y, ballRadius * 2.5f * pocketScale, scratchWarningPaint)
                     canvas.drawLine(p.x - 14f, p.y - 14f, p.x + 14f, p.y + 14f, scratchWarningPaint)
                     canvas.drawLine(p.x - 14f, p.y + 14f, p.x + 14f, p.y - 14f, scratchWarningPaint)
                 }
@@ -547,7 +561,8 @@ class AimCanvasView(context: Context) : View(context) {
                 tableRight = tableBounds.right,
                 tableBottom = tableBounds.bottom,
                 ballRadius = ballRadius,
-                pockets = pockets
+                pockets = pockets,
+                pocketScale = pocketScale
             )
 
             for ((idx, seg) in cueDirectTrajectory.segments.withIndex()) {
@@ -566,8 +581,8 @@ class AimCanvasView(context: Context) : View(context) {
                 canvas.drawCircle(cueDirectTrajectory.stopX, cueDirectTrajectory.stopY, 4f, stopCenterDotPaint)
             } else if (enablePocketGlow) {
                 val p = pockets[cueDirectTrajectory.pocketIndex]
-                canvas.drawCircle(p.x, p.y, ballRadius * 1.6f, pocketGlowPaint)
-                canvas.drawCircle(p.x, p.y, ballRadius * 2.3f, pocketGlowPaint)
+                canvas.drawCircle(p.x, p.y, ballRadius * 1.6f * pocketScale, pocketGlowPaint)
+                canvas.drawCircle(p.x, p.y, ballRadius * 2.3f * pocketScale, pocketGlowPaint)
             }
         }
 

@@ -163,14 +163,15 @@ class LineIntersection(
             tableRight: Float,
             tableBottom: Float,
             ballRadius: Float,
-            pockets: List<Vector2D>
+            pockets: List<Vector2D>,
+            pocketScale: Float = 1.0f
         ): BallTrajectory {
             val segments = mutableListOf<TrajectorySegment>()
             var currX = startX
             var currY = startY
             var currAngle = angleDeg
             var remainingDist = totalDistance
-            val pocketThreshold = ballRadius * 1.6f
+            val pocketThreshold = ballRadius * 1.6f * pocketScale
 
             var stopX = startX
             var stopY = startY
