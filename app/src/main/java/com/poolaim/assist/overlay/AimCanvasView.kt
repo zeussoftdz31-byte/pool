@@ -137,8 +137,8 @@ class AimCanvasView(context: Context) : View(context) {
     // Device & Calibration Adjustments (Persistent via SharedPreferences)
     var offsetX = 0f
     var offsetY = 0f
-    var scaleX = 1.0f
-    var scaleY = 1.0f
+    var tableScaleX = 1.0f
+    var tableScaleY = 1.0f
 
     private var viewWidth = 0
     private var viewHeight = 0
@@ -152,8 +152,8 @@ class AimCanvasView(context: Context) : View(context) {
             val prefs = context.getSharedPreferences("pool_wizard_calibration", Context.MODE_PRIVATE)
             offsetX = prefs.getFloat("offset_x", 0f)
             offsetY = prefs.getFloat("offset_y", 0f)
-            scaleX = prefs.getFloat("scale_x", 1.0f)
-            scaleY = prefs.getFloat("scale_y", 1.0f)
+            tableScaleX = prefs.getFloat("scale_x", 1.0f)
+            tableScaleY = prefs.getFloat("scale_y", 1.0f)
         } catch (e: Exception) {
             e.printStackTrace()
         }
@@ -165,8 +165,8 @@ class AimCanvasView(context: Context) : View(context) {
             prefs.edit()
                 .putFloat("offset_x", offsetX)
                 .putFloat("offset_y", offsetY)
-                .putFloat("scale_x", scaleX)
-                .putFloat("scale_y", scaleY)
+                .putFloat("scale_x", tableScaleX)
+                .putFloat("scale_y", tableScaleY)
                 .apply()
         } catch (e: Exception) {
             e.printStackTrace()
@@ -176,7 +176,7 @@ class AimCanvasView(context: Context) : View(context) {
     fun adjustCalibration(dOffsetX: Float, dOffsetY: Float, dScaleX: Float) {
         offsetX += dOffsetX
         offsetY += dOffsetY
-        scaleX = (scaleX + dScaleX).coerceIn(0.80f, 1.25f)
+        tableScaleX = (tableScaleX + dScaleX).coerceIn(0.80f, 1.25f)
         saveCalibration()
         if (viewWidth > 0 && viewHeight > 0) {
             recalculateTableBounds(viewWidth, viewHeight)
@@ -186,8 +186,8 @@ class AimCanvasView(context: Context) : View(context) {
     fun resetCalibration() {
         offsetX = 0f
         offsetY = 0f
-        scaleX = 1.0f
-        scaleY = 1.0f
+        tableScaleX = 1.0f
+        tableScaleY = 1.0f
         saveCalibration()
         if (viewWidth > 0 && viewHeight > 0) {
             recalculateTableBounds(viewWidth, viewHeight)
@@ -211,8 +211,8 @@ class AimCanvasView(context: Context) : View(context) {
         // 8 Ball Pool table playfield has an exact aspect ratio of 2.0 : 1.0
         // Playable table height occupies ~78.2% of landscape screen height
         // Leaving ~13.6% at the top for player avatars/timer, and ~8.2% at the bottom
-        val tableH = screenH * 0.782f * scaleY
-        val tableW = tableH * 2.0f * scaleX
+        val tableH = screenH * 0.782f * tableScaleY
+        val tableW = tableH * 2.0f * tableScaleX
 
         // Horizontally centered across the physical display with offset calibration
         val tableLeft = (screenW - tableW) / 2f + offsetX
