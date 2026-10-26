@@ -26,7 +26,18 @@ jobs:
         cache-disabled: true
 
     - name: Build Debug APK
-      run: gradle assembleDebug --stacktrace --no-daemon
+      run: |
+        gradle assembleDebug --stacktrace --no-daemon 2>&1 | tee build_output.log
+
+    - name: Publish Build Summary
+      if: always()
+      run: |
+        echo "## 📋 Gradle Build Log Summary" >> $GITHUB_STEP_SUMMARY
+        if [ -f build_output.log ]; then
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          tail -n 120 build_output.log >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+        fi
 
     - name: Upload APK Artifact
       uses: actions/upload-artifact@v4
