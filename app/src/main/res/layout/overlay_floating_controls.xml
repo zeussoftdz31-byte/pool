@@ -1,0 +1,78 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/floatingRoot"
+    android:layout_width="wrap_content"
+    android:layout_height="wrap_content"
+    android:orientation="horizontal"
+    android:background="@drawable/bg_floating_pill"
+    android:paddingStart="10dp"
+    android:paddingEnd="10dp"
+    android:paddingTop="6dp"
+    android:paddingBottom="6dp"
+    android:gravity="center_vertical"
+    android:elevation="14dp">
+
+    <!-- Draggable Handle -->
+    <TextView
+        android:id="@+id/btnDragHandle"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="🎱"
+        android:textSize="18sp"
+        android:padding="2dp" />
+
+    <!-- Live Status Indicator -->
+    <TextView
+        android:id="@+id/tvAutoStatus"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="⚡ AUTO AIM"
+        android:textColor="@color/laser_green"
+        android:textStyle="bold"
+        android:textSize="11sp"
+        android:background="#2200E676"
+        android:paddingStart="7dp"
+        android:paddingEnd="7dp"
+        android:paddingTop="3dp"
+        android:paddingBottom="3dp"
+        android:layout_marginStart="6dp"
+        android:layout_marginEnd="8dp" />
+
+    <!-- Toggle 6-Pockets Guidance Lines -->
+    <TextView
+        android:id="@+id/btnTogglePockets"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="6-PKT"
+        android:textColor="@color/accent_cyan"
+        android:textStyle="bold"
+        android:textSize="10sp"
+        android:background="#2200E5FF"
+        android:paddingStart="6dp"
+        android:paddingEnd="6dp"
+        android:paddingTop="3dp"
+        android:paddingBottom="3dp"
+        android:layout_marginEnd="6dp" />
+
+    <!-- Toggle Visibility -->
+    <TextView
+        android:id="@+id/btnToggleLines"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="👁️"
+        android:textSize="16sp"
+        android:padding="3dp"
+        android:layout_marginEnd="4dp" />
+
+    <!-- Close / Exit Overlay -->
+    <TextView
+        android:id="@+id/btnCloseOverlay"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="✖"
+        android:textColor="@color/accent_red"
+        android:textSize="15sp"
+        android:textStyle="bold"
+        android:padding="3dp" />
+
+</LinearLayout>

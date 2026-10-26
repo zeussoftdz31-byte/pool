@@ -1,0 +1,14 @@
+<resources>
+    <string name="app_name">Pool Aim Master Pro</string>
+    <string name="overlay_permission_title">صلاحية الظهور فوق التطبيقات (Overlay)</string>
+    <string name="overlay_permission_desc">يحتاج التطبيق لإذن الظهور فوق الألعاب لرسم خطوط التوجيه المباشرة أثناء اللعب</string>
+    <string name="grant_permission">منح الإذن الآن</string>
+    <string name="start_aim_assist">تشغيل المساعد المباشر (Start Overlay)</string>
+    <string name="stop_aim_assist">إيقاف المساعد (Stop)</string>
+    <string name="settings_title">إعدادات خطوط التوجيه والفيزياء</string>
+    <string name="line_color">لون الخط الرئيسي</string>
+    <string name="bounce_lines">عدد ارتدادات الجدار (Cushion Bounces)</string>
+    <string name="cue_power_factor">حساسية قوة الضربة ونقطة التوقف</string>
+    <string name="status_ready">الحالة: جاهز للتشغيل فوق اللعبة</string>
+    <string name="status_running">الحالة: المساعد يعمل لايف الآن</string>
+</resources>

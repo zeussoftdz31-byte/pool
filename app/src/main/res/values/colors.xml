@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="black">#FF000000</color>
+    <color name="white">#FFFFFFFF</color>
+    <color name="bg_dark">#FF0F172A</color>
+    <color name="bg_card">#FF1E293B</color>
+    <color name="accent_green">#FF10B981</color>
+    <color name="accent_cyan">#FF06B6D4</color>
+    <color name="accent_orange">#FFF97316</color>
+    <color name="accent_red">#FFEF4444</color>
+    
+    <!-- Aim Guideline & Prediction Colors -->
+    <color name="laser_white">#FFFFFFFF</color>
+    <color name="laser_cyan">#FF00E5FF</color>
+    <color name="laser_green">#FF00E676</color>
+    <color name="laser_yellow">#FFFFD600</color>
+    <color name="laser_red">#FFFF1744</color>
+    <color name="ball_ghost">#66FFFFFF</color>
+    <color name="pocket_glow">#9900E676</color>
+</resources>

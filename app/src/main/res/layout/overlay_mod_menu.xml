@@ -1,0 +1,450 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/modMenuRoot"
+    android:layout_width="wrap_content"
+    android:layout_height="wrap_content">
+
+    <!-- 1. Collapsed Floating Badge (Wizard 8 Ball Pool Mod Icon) -->
+    <LinearLayout
+        android:id="@+id/layoutCollapsedBadge"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:background="@drawable/bg_floating_pill"
+        android:paddingStart="12dp"
+        android:paddingEnd="12dp"
+        android:paddingTop="7dp"
+        android:paddingBottom="7dp"
+        android:gravity="center_vertical"
+        android:elevation="16dp"
+        android:visibility="visible">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="🎱"
+            android:textSize="18sp" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="WIZARD MOD"
+            android:textColor="@color/laser_green"
+            android:textStyle="bold"
+            android:textSize="12sp"
+            android:layout_marginStart="6dp" />
+
+        <TextView
+            android:id="@+id/btnQuickToggleLines"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="👁️"
+            android:textSize="15sp"
+            android:padding="2dp"
+            android:layout_marginStart="8dp" />
+    </LinearLayout>
+
+    <!-- 2. Expanded Mod Menu Panel (Settings & Physics Controls) -->
+    <LinearLayout
+        android:id="@+id/layoutExpandedMenu"
+        android:layout_width="320dp"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:background="@drawable/bg_mod_menu_card"
+        android:padding="14dp"
+        android:elevation="20dp"
+        android:visibility="gone">
+
+        <!-- Header -->
+        <RelativeLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="8dp">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="🎱 POOL WIZARD MOD"
+                android:textColor="@color/laser_green"
+                android:textSize="14sp"
+                android:textStyle="bold"
+                android:layout_alignParentStart="true"
+                android:layout_centerVertical="true" />
+
+            <TextView
+                android:id="@+id/btnMinimizeMenu"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="➖"
+                android:textColor="@color/white"
+                android:textSize="18sp"
+                android:padding="4dp"
+                android:layout_alignParentEnd="true"
+                android:layout_centerVertical="true" />
+        </RelativeLayout>
+
+        <!-- Status Tag -->
+        <TextView
+            android:id="@+id/tvModStatus"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="🟢 تتبع تلقائي مباشر • 60 FPS • دقة 100%"
+            android:textColor="#94A3B8"
+            android:textSize="11sp"
+            android:background="#1E293B"
+            android:padding="5dp"
+            android:gravity="center"
+            android:layout_marginBottom="8dp" />
+
+        <ScrollView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:scrollbars="vertical">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical">
+
+                <!-- Feature 1: Dynamic Cue Power Simulation & Stop Circles -->
+                <RelativeLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginBottom="6dp">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="⚡ محاكاة قوة السحب وأماكن التوقف"
+                        android:textColor="@color/white"
+                        android:textSize="11sp"
+                        android:layout_alignParentStart="true"
+                        android:layout_centerVertical="true" />
+
+                    <androidx.appcompat.widget.SwitchCompat
+                        android:id="@+id/switchPowerSimulation"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:checked="true"
+                        android:layout_alignParentEnd="true"
+                        android:layout_centerVertical="true" />
+                </RelativeLayout>
+
+                <!-- Feature 2: Bank Shots (Cushion Rebounds) -->
+                <RelativeLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginBottom="6dp">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="📐 ارتدادات الجدران (4 Banks)"
+                        android:textColor="@color/white"
+                        android:textSize="11sp"
+                        android:layout_alignParentStart="true"
+                        android:layout_centerVertical="true" />
+
+                    <androidx.appcompat.widget.SwitchCompat
+                        android:id="@+id/switchBankShots"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:checked="true"
+                        android:layout_alignParentEnd="true"
+                        android:layout_centerVertical="true" />
+                </RelativeLayout>
+
+                <!-- Feature 3: Cue Ball Tangent & Stop Position -->
+                <RelativeLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginBottom="6dp">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="⚪ مسار وتوقف الكرة البيضاء"
+                        android:textColor="@color/white"
+                        android:textSize="11sp"
+                        android:layout_alignParentStart="true"
+                        android:layout_centerVertical="true" />
+
+                    <androidx.appcompat.widget.SwitchCompat
+                        android:id="@+id/switchCueBallPath"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:checked="true"
+                        android:layout_alignParentEnd="true"
+                        android:layout_centerVertical="true" />
+                </RelativeLayout>
+
+                <!-- Feature 4: 6-Pocket Guides -->
+                <RelativeLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginBottom="6dp">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="🎯 خطوط الجيوب الستة (6-PKT)"
+                        android:textColor="@color/white"
+                        android:textSize="11sp"
+                        android:layout_alignParentStart="true"
+                        android:layout_centerVertical="true" />
+
+                    <androidx.appcompat.widget.SwitchCompat
+                        android:id="@+id/switch6Pockets"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:checked="false"
+                        android:layout_alignParentEnd="true"
+                        android:layout_centerVertical="true" />
+                </RelativeLayout>
+
+                <!-- Feature 5: Neon Pocket Glow Lock -->
+                <RelativeLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginBottom="10dp">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="✨ توهج الجيب الذكي عند الهدف"
+                        android:textColor="@color/white"
+                        android:textSize="11sp"
+                        android:layout_alignParentStart="true"
+                        android:layout_centerVertical="true" />
+
+                    <androidx.appcompat.widget.SwitchCompat
+                        android:id="@+id/switchPocketGlow"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:checked="true"
+                        android:layout_alignParentEnd="true"
+                        android:layout_centerVertical="true" />
+                </RelativeLayout>
+
+                <!-- DPI & Screen Calibration Section -->
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="📐 معايرة دقة الطاولة (DPI &amp; Resolution):"
+                    android:textColor="#CBD5E1"
+                    android:textSize="11sp"
+                    android:textStyle="bold"
+                    android:layout_marginBottom="4dp" />
+
+                <TextView
+                    android:id="@+id/tvDisplayInfo"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="2400×1080 • 20:9 • 400 DPI • طاولة 2:1"
+                    android:textColor="@color/accent_cyan"
+                    android:textSize="10sp"
+                    android:background="#1E293B"
+                    android:padding="4dp"
+                    android:gravity="center"
+                    android:layout_marginBottom="6dp" />
+
+                <!-- Calibration Controls: X, Y, Width, Reset -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center"
+                    android:layout_marginBottom="4dp">
+
+                    <TextView
+                        android:id="@+id/btnCalibLeft"
+                        android:layout_width="0dp"
+                        android:layout_height="28dp"
+                        android:layout_weight="1"
+                        android:text="◀ يسار"
+                        android:textColor="@color/white"
+                        android:textSize="10sp"
+                        android:gravity="center"
+                        android:background="#33FFFFFF"
+                        android:layout_marginEnd="3dp" />
+
+                    <TextView
+                        android:id="@+id/btnCalibRight"
+                        android:layout_width="0dp"
+                        android:layout_height="28dp"
+                        android:layout_weight="1"
+                        android:text="يمين ▶"
+                        android:textColor="@color/white"
+                        android:textSize="10sp"
+                        android:gravity="center"
+                        android:background="#33FFFFFF"
+                        android:layout_marginEnd="3dp" />
+
+                    <TextView
+                        android:id="@+id/btnCalibUp"
+                        android:layout_width="0dp"
+                        android:layout_height="28dp"
+                        android:layout_weight="1"
+                        android:text="▲ أعلى"
+                        android:textColor="@color/white"
+                        android:textSize="10sp"
+                        android:gravity="center"
+                        android:background="#33FFFFFF"
+                        android:layout_marginEnd="3dp" />
+
+                    <TextView
+                        android:id="@+id/btnCalibDown"
+                        android:layout_width="0dp"
+                        android:layout_height="28dp"
+                        android:layout_weight="1"
+                        android:text="أسفل ▼"
+                        android:textColor="@color/white"
+                        android:textSize="10sp"
+                        android:gravity="center"
+                        android:background="#33FFFFFF" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center"
+                    android:layout_marginBottom="10dp">
+
+                    <TextView
+                        android:id="@+id/btnCalibWidthPlus"
+                        android:layout_width="0dp"
+                        android:layout_height="28dp"
+                        android:layout_weight="1"
+                        android:text="➕ عرض"
+                        android:textColor="@color/white"
+                        android:textSize="10sp"
+                        android:gravity="center"
+                        android:background="#33FFFFFF"
+                        android:layout_marginEnd="3dp" />
+
+                    <TextView
+                        android:id="@+id/btnCalibWidthMinus"
+                        android:layout_width="0dp"
+                        android:layout_height="28dp"
+                        android:layout_weight="1"
+                        android:text="➖ عرض"
+                        android:textColor="@color/white"
+                        android:textSize="10sp"
+                        android:gravity="center"
+                        android:background="#33FFFFFF"
+                        android:layout_marginEnd="3dp" />
+
+                    <TextView
+                        android:id="@+id/btnCalibReset"
+                        android:layout_width="0dp"
+                        android:layout_height="28dp"
+                        android:layout_weight="1.3"
+                        android:text="🔄 ضبط تلقائي"
+                        android:textColor="@color/laser_yellow"
+                        android:textSize="10sp"
+                        android:gravity="center"
+                        android:background="#22FFD600" />
+                </LinearLayout>
+
+                <!-- Laser Color Themes -->
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="🎨 ألوان الليزر (Laser Theme):"
+                    android:textColor="#CBD5E1"
+                    android:textSize="11sp"
+                    android:layout_marginBottom="4dp" />
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center"
+                    android:layout_marginBottom="12dp">
+
+                    <TextView
+                        android:id="@+id/btnThemeGreen"
+                        android:layout_width="0dp"
+                        android:layout_height="30dp"
+                        android:layout_weight="1"
+                        android:text="🟢 ليزري"
+                        android:textColor="@color/white"
+                        android:textSize="10sp"
+                        android:gravity="center"
+                        android:background="#2200E676"
+                        android:layout_marginEnd="3dp" />
+
+                    <TextView
+                        android:id="@+id/btnThemeCyan"
+                        android:layout_width="0dp"
+                        android:layout_height="30dp"
+                        android:layout_weight="1"
+                        android:text="🔵 سماوي"
+                        android:textColor="@color/white"
+                        android:textSize="10sp"
+                        android:gravity="center"
+                        android:background="#2200E5FF"
+                        android:layout_marginEnd="3dp" />
+
+                    <TextView
+                        android:id="@+id/btnThemeGold"
+                        android:layout_width="0dp"
+                        android:layout_height="30dp"
+                        android:layout_weight="1"
+                        android:text="🟡 ذهبي"
+                        android:textColor="@color/white"
+                        android:textSize="10sp"
+                        android:gravity="center"
+                        android:background="#22FFD600"
+                        android:layout_marginEnd="3dp" />
+
+                    <TextView
+                        android:id="@+id/btnThemeRed"
+                        android:layout_width="0dp"
+                        android:layout_height="30dp"
+                        android:layout_weight="1"
+                        android:text="🔴 أحمر"
+                        android:textColor="@color/white"
+                        android:textSize="10sp"
+                        android:gravity="center"
+                        android:background="#22FF1744" />
+                </LinearLayout>
+
+                <!-- Actions -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal">
+
+                    <TextView
+                        android:id="@+id/btnToggleVisibility"
+                        android:layout_width="0dp"
+                        android:layout_height="34dp"
+                        android:layout_weight="1"
+                        android:text="👁️ إخفاء الخطوط"
+                        android:textColor="@color/white"
+                        android:textSize="11sp"
+                        android:gravity="center"
+                        android:background="#334155"
+                        android:layout_marginEnd="6dp" />
+
+                    <TextView
+                        android:id="@+id/btnCloseMod"
+                        android:layout_width="0dp"
+                        android:layout_height="34dp"
+                        android:layout_weight="1"
+                        android:text="✖ إغلاق البوت"
+                        android:textColor="@color/accent_red"
+                        android:textSize="11sp"
+                        android:textStyle="bold"
+                        android:gravity="center"
+                        android:background="#22EF4444" />
+                </LinearLayout>
+
+            </LinearLayout>
+        </ScrollView>
+
+    </LinearLayout>
+
+</FrameLayout>

@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="56dp"
+    android:layout_height="56dp">
+
+    <!-- Glowing Circular Ring -->
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="@drawable/bg_cue_ring" />
+
+    <!-- Center Crosshair Dot -->
+    <View
+        android:layout_width="6dp"
+        android:layout_height="6dp"
+        android:layout_gravity="center"
+        android:background="#00E5FF" />
+
+    <!-- Small Label Badge -->
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="top|center_horizontal"
+        android:text="⚪ CUE"
+        android:textColor="#00E5FF"
+        android:textSize="9sp"
+        android:textStyle="bold"
+        android:background="#99000000"
+        android:paddingStart="4dp"
+        android:paddingEnd="4dp" />
+
+</FrameLayout>
