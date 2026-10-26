@@ -27,6 +27,7 @@ jobs:
 
     - name: Build Debug APK
       run: |
+        set -o pipefail
         gradle assembleDebug --stacktrace --no-daemon 2>&1 | tee build_output.log
 
     - name: Publish Build Summary
@@ -34,8 +35,13 @@ jobs:
       run: |
         echo "## 📋 Gradle Build Log Summary" >> $GITHUB_STEP_SUMMARY
         if [ -f build_output.log ]; then
+          echo "### 🔍 Compiler Errors & Warnings:" >> $GITHUB_STEP_SUMMARY
           echo '```' >> $GITHUB_STEP_SUMMARY
-          tail -n 120 build_output.log >> $GITHUB_STEP_SUMMARY
+          grep -E "(e: |w: |error:|FAILURE:|BUILD FAILED)" build_output.log | head -n 40 >> $GITHUB_STEP_SUMMARY || true
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          echo "### 📜 Last 100 lines:" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          tail -n 100 build_output.log >> $GITHUB_STEP_SUMMARY
           echo '```' >> $GITHUB_STEP_SUMMARY
         fi
 
@@ -44,3 +50,4 @@ jobs:
       with:
         name: PoolAimMaster-APK
         path: app/build/outputs/apk/debug/app-debug.apk
+        if-no-files-found: error

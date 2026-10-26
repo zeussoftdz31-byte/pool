@@ -192,6 +192,26 @@ class ScreenAimTracker(
             return lum > 190f && sat < 0.15f
         }
 
+        fun isTrueCueBall(cx: Float, cy: Float, radius: Float): Boolean {
+            var coloredPoints = 0
+            val perimeterSamples = 16
+            val piF = Math.PI.toFloat()
+
+            for (i in 0 until perimeterSamples) {
+                val angle = i * (2f * piF) / perimeterSamples
+                val px = (cx + radius * 0.88f * cos(angle.toDouble()).toFloat()).toInt()
+                val py = (cy + radius * 0.88f * sin(angle.toDouble()).toFloat()).toInt()
+                val rgb = getPixelRgb(px, py)
+                val sat = getSaturation(rgb)
+
+                if (sat > 0.30f) {
+                    coloredPoints++
+                }
+            }
+
+            return coloredPoints == 0
+        }
+
         val ballRadiusEst = width * 0.0145f // ~14px in 960x540
 
         // ==========================================
@@ -225,7 +245,7 @@ class ScreenAimTracker(
             if (count in 15..280) {
                 val candidateX = sumX / count
                 val candidateY = sumY / count
-                if (isTrueCueBall(candidateX, candidateY, ballRadiusEst, ::getPixelRgb, ::getSaturation)) {
+                if (isTrueCueBall(candidateX, candidateY, ballRadiusEst)) {
                     detectedCueX = candidateX
                     detectedCueY = candidateY
                 }
@@ -263,7 +283,7 @@ class ScreenAimTracker(
                             val cx = cSumX / clusterCount
                             val cy = cSumY / clusterCount
 
-                            if (isTrueCueBall(cx, cy, ballRadiusEst, ::getPixelRgb, ::getSaturation)) {
+                            if (isTrueCueBall(cx, cy, ballRadiusEst)) {
                                 val score = clusterCount.toFloat()
                                 if (score > bestScore) {
                                     bestScore = score
@@ -335,9 +355,10 @@ class ScreenAimTracker(
 
         // Silky smooth angular interpolation (handles wrap-around)
         if (maxLineContrast > 80f) {
+            val piF = Math.PI.toFloat()
             var diff = detectedAngle - smoothAngle
-            while (diff < -Math.PI) diff += (2f * Math.PI.toFloat())
-            while (diff > Math.PI) diff -= (2f * Math.PI.toFloat())
+            while (diff < -piF) diff += (2f * piF)
+            while (diff > piF) diff -= (2f * piF)
             smoothAngle += diff * 0.40f
         }
 
@@ -440,35 +461,7 @@ class ScreenAimTracker(
         )
     }
 
-    /**
-     * Checks if a candidate circle is the TRUE all-white cue ball.
-     * Striped balls (9-15) have colored bands with high saturation on their perimeter.
-     * The true cue ball has 0 colored points on its perimeter.
-     */
-    private fun isTrueCueBall(
-        cx: Float,
-        cy: Float,
-        radius: Float,
-        getPixelRgb: (Int, Int) -> IntArray,
-        getSaturation: (IntArray) -> Float
-    ): Boolean {
-        var coloredPoints = 0
-        val perimeterSamples = 16
 
-        for (i in 0 until perimeterSamples) {
-            val angle = i * (2f * Math.PI.toFloat()) / perimeterSamples
-            val px = (cx + radius * 0.88f * cos(angle)).toInt()
-            val py = (cy + radius * 0.88f * sin(angle)).toInt()
-            val rgb = getPixelRgb(px, py)
-            val sat = getSaturation(rgb)
-
-            if (sat > 0.30f) {
-                coloredPoints++
-            }
-        }
-
-        return coloredPoints == 0
-    }
 
     fun stop() {
         try {

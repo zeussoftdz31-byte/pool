@@ -397,7 +397,7 @@ class AimOverlayService : Service(), SensorEventListener {
             intent?.getParcelableExtra(EXTRA_RESULT_DATA, Intent::class.java)
         } else {
             @Suppress("DEPRECATION")
-            intent?.getParcelableExtra(EXTRA_RESULT_DATA)
+            intent?.getParcelableExtra(EXTRA_RESULT_DATA) as? Intent
         }
 
         if (resultCode == Activity.RESULT_OK && resultData != null) {
