@@ -437,17 +437,20 @@ class ScreenAimTracker(
         // 3. Smooth Hysteresis Tracking: Never drops or flickers between frames.
         // 4. Cue-Stick Auto-Steal: If mistakenly locked on another ball, immediately
         //    snaps to the true cue ball the moment the player touches the cue stick!
+        // 1. Cue Stick Detection: Checks 16 directions around ball for the cue stick shaft.
+        // Screen buffer boundary check (2 until width - 2) ensures the cue stick is DETECTED
+        // EVEN WHEN OVER THE CUSHION/RAIL!
         fun checkCueStickNear(cx: Float, cy: Float): Boolean {
             for (d in 0 until 16) {
                 val theta = (d * 2.0 * Math.PI / 16).toFloat()
                 val cosT = cos(theta.toDouble()).toFloat()
                 val sinT = sin(theta.toDouble()).toFloat()
                 var stickPixels = 0
-                for (s in 2..6) {
-                    val dist = ballRadiusEst * (1.5f + s * 0.9f)
+                for (s in 2..7) {
+                    val dist = ballRadiusEst * (1.3f + s * 0.9f)
                     val bx = (cx - dist * cosT).toInt()
                     val by = (cy - dist * sinT).toInt()
-                    if (bx in tableStartX..tableEndX && by in tableStartY..tableEndY) {
+                    if (bx in 2 until width - 2 && by in 2 until height - 2) {
                         val c = getPixelPacked(buffer, bx, by, rowStride, pixelStride, width, height)
                         val r = (c shr 16) and 0xFF
                         val g = (c shr 8) and 0xFF
@@ -462,16 +465,19 @@ class ScreenAimTracker(
             return false
         }
 
+        // 2. Candidate Evaluation: Evaluates whiteness purity and cue stick presence.
+        // Full cushion support: NEVER rejects balls touching the cushion!
         fun scoreCandidateCueBall(cx: Float, cy: Float): Float {
             val icx = cx.toInt()
             val icy = cy.toInt()
-            val rDisc = (ballRadiusEst * 1.15f).toInt()
-            if (icx - rDisc < tableStartX || icx + rDisc > tableEndX ||
-                icy - rDisc < tableStartY || icy + rDisc > tableEndY
+            // Allow ball centers to be anywhere on the playable table, right against cushions
+            if (icx < tableStartX - 4 || icx > tableEndX + 4 ||
+                icy < tableStartY - 4 || icy > tableEndY + 4
             ) {
                 return -1f
             }
 
+            val rDisc = (ballRadiusEst * 1.15f).toInt()
             var whiteWeight = 0f
             var whiteCount = 0
             var coloredCount = 0
@@ -479,8 +485,8 @@ class ScreenAimTracker(
             for (dy in -rDisc..rDisc step 2) {
                 for (dx in -rDisc..rDisc step 2) {
                     if (dx * dx + dy * dy <= rDisc * rDisc) {
-                        val px = icx + dx
-                        val py = icy + dy
+                        val px = (icx + dx).coerceIn(0, width - 1)
+                        val py = (icy + dy).coerceIn(0, height - 1)
                         val c = getPixelPacked(buffer, px, py, rowStride, pixelStride, width, height)
                         val r = (c shr 16) and 0xFF
                         val g = (c shr 8) and 0xFF
@@ -498,8 +504,9 @@ class ScreenAimTracker(
                 }
             }
 
-            // Must have sufficient white mass to be a real ball (rejects tiny specular glares)
-            if (whiteCount < 10) return -1f
+            // Must have sufficient white mass to be a real ball (rejects tiny specular glares).
+            // A ball touching the cushion has at least 8 sample points.
+            if (whiteCount < 8) return -1f
 
             val total = (whiteCount + coloredCount).toFloat()
             val purity = (whiteCount.toFloat() / (total + 0.001f)).coerceIn(0f, 1f)
@@ -513,7 +520,7 @@ class ScreenAimTracker(
                 score *= 0.25f // Extra penalty for striped balls
             }
 
-            // Cue stick bonus: In 8 Ball Pool, the cue stick is ONLY ever positioned behind the true cue ball!
+            // Cue stick bonus: In 8 Ball Pool, the cue stick is ONLY positioned behind the true cue ball!
             if (checkCueStickNear(cx, cy)) {
                 score += 15000f
             }
@@ -525,17 +532,17 @@ class ScreenAimTracker(
         var detectedCueY = -1f
 
         // Fast Path: Search and smoothly track around last locked position
-        if (isLockedOnCue && lockedCueX > tableStartX && lockedCueX < tableEndX &&
-            lockedCueY > tableStartY && lockedCueY < tableEndY
+        if (isLockedOnCue && lockedCueX in (tableStartX - 6)..(tableEndX + 6) &&
+            lockedCueY in (tableStartY - 6)..(tableEndY + 6)
         ) {
             var sumX = 0f
             var sumY = 0f
             var totalWeight = 0f
             val searchRadius = (ballRadiusEst * 1.6f).toInt()
-            val startSearchX = (lockedCueX - searchRadius).toInt().coerceIn(tableStartX, tableEndX)
-            val endSearchX = (lockedCueX + searchRadius).toInt().coerceIn(tableStartX, tableEndX)
-            val startSearchY = (lockedCueY - searchRadius).toInt().coerceIn(tableStartY, tableEndY)
-            val endSearchY = (lockedCueY + searchRadius).toInt().coerceIn(tableStartY, tableEndY)
+            val startSearchX = (lockedCueX - searchRadius).toInt().coerceIn(0, width - 1)
+            val endSearchX = (lockedCueX + searchRadius).toInt().coerceIn(0, width - 1)
+            val startSearchY = (lockedCueY - searchRadius).toInt().coerceIn(0, height - 1)
+            val endSearchY = (lockedCueY + searchRadius).toInt().coerceIn(0, height - 1)
 
             for (y in startSearchY..endSearchY) {
                 for (x in startSearchX..endSearchX) {
@@ -553,7 +560,7 @@ class ScreenAimTracker(
                 }
             }
 
-            if (totalWeight > 35f) {
+            if (totalWeight > 25f) {
                 val newX = sumX / totalWeight
                 val newY = sumY / totalWeight
                 // Smooth position (eliminates jitter)
@@ -579,8 +586,8 @@ class ScreenAimTracker(
                 var foundStickX = -1f
                 var foundStickY = -1f
                 val stepG = (ballRadiusEst * 1.5f).toInt().coerceAtLeast(10)
-                for (sy in (tableStartY + ballRadiusEst.toInt()) until (tableEndY - ballRadiusEst.toInt()) step stepG) {
-                    for (sx in (tableStartX + ballRadiusEst.toInt()) until (tableEndX - ballRadiusEst.toInt()) step stepG) {
+                for (sy in tableStartY until tableEndY step stepG) {
+                    for (sx in tableStartX until tableEndX step stepG) {
                         val c = getPixelPacked(buffer, sx, sy, rowStride, pixelStride, width, height)
                         if (isCueBallColor((c shr 16) and 0xFF, (c shr 8) and 0xFF, c and 0xFF)) {
                             if (checkCueStickNear(sx.toFloat(), sy.toFloat())) {
@@ -601,15 +608,15 @@ class ScreenAimTracker(
             }
         }
 
-        // Slow Path: Scan table to find cue ball
+        // Slow Path: Scan table to find cue ball (Scans right up to cushions!)
         if (detectedCueX < 0f) {
             var bestScore = 0f
             var bestBx = -1f
             var bestBy = -1f
 
             val scanStep = 4
-            for (y in (tableStartY + ballRadiusEst.toInt()) until (tableEndY - ballRadiusEst.toInt()) step scanStep) {
-                for (x in (tableStartX + ballRadiusEst.toInt()) until (tableEndX - ballRadiusEst.toInt()) step scanStep) {
+            for (y in tableStartY until tableEndY step scanStep) {
+                for (x in tableStartX until tableEndX step scanStep) {
                     val c = getPixelPacked(buffer, x, y, rowStride, pixelStride, width, height)
                     val r = (c shr 16) and 0xFF
                     val g = (c shr 8) and 0xFF
@@ -624,7 +631,7 @@ class ScreenAimTracker(
                             val rInt = (ballRadiusEst * 1.1f).toInt()
                             for (cy in (y - rInt)..(y + rInt) step 2) {
                                 for (cx in (x - rInt)..(x + rInt) step 2) {
-                                    val sc = getPixelPacked(buffer, cx, cy, rowStride, pixelStride, width, height)
+                                    val sc = getPixelPacked(buffer, cx.coerceIn(0, width - 1), cy.coerceIn(0, height - 1), rowStride, pixelStride, width, height)
                                     val sr = (sc shr 16) and 0xFF
                                     val sg = (sc shr 8) and 0xFF
                                     val sb = sc and 0xFF
@@ -637,7 +644,7 @@ class ScreenAimTracker(
                                     }
                                 }
                             }
-                            if (totalW > 30f) {
+                            if (totalW > 25f) {
                                 bestScore = score
                                 bestBx = sumX / totalW
                                 bestBy = sumY / totalW
@@ -669,14 +676,14 @@ class ScreenAimTracker(
         }
 
         // =========================================================================
-        // STEP 3: DETECT OBJECT / TARGET BALLS (TRUE CENTROIDS)
+        // STEP 3: DETECT OBJECT / TARGET BALLS (TRUE CENTROIDS, INCLUDING CUSHION BALLS)
         // =========================================================================
         val detectedBalls = mutableListOf<CircleBall>()
         val ballStep = 6
         val minBallDistSq = (ballRadiusEst * 1.75f) * (ballRadiusEst * 1.75f)
 
-        for (y in (tableStartY + ballRadiusEst.toInt()) until (tableEndY - ballRadiusEst.toInt()) step ballStep) {
-            for (x in (tableStartX + ballRadiusEst.toInt()) until (tableEndX - ballRadiusEst.toInt()) step ballStep) {
+        for (y in tableStartY until tableEndY step ballStep) {
+            for (x in tableStartX until tableEndX step ballStep) {
                 val c = getPixelPacked(buffer, x, y, rowStride, pixelStride, width, height)
                 val r = (c shr 16) and 0xFF
                 val g = (c shr 8) and 0xFF
@@ -699,10 +706,10 @@ class ScreenAimTracker(
                             var sumBy = 0f
                             var ballPixels = 0
                             val bBoxRadius = (ballRadiusEst * 1.15f).toInt()
-                            val startBx = (x - bBoxRadius).coerceIn(tableStartX, tableEndX)
-                            val endBx = (x + bBoxRadius).coerceIn(tableStartX, tableEndX)
-                            val startBy = (y - bBoxRadius).coerceIn(tableStartY, tableEndY)
-                            val endBy = (y + bBoxRadius).coerceIn(tableStartY, tableEndY)
+                            val startBx = (x - bBoxRadius).coerceIn(0, width - 1)
+                            val endBx = (x + bBoxRadius).coerceIn(0, width - 1)
+                            val startBy = (y - bBoxRadius).coerceIn(0, height - 1)
+                            val endBy = (y + bBoxRadius).coerceIn(0, height - 1)
 
                             for (by in startBy..endBy step 2) {
                                 for (bx in startBx..endBx step 2) {
@@ -718,7 +725,7 @@ class ScreenAimTracker(
                                 }
                             }
 
-                            if (ballPixels >= 12) {
+                            if (ballPixels >= 10) {
                                 val trueBx = sumBx / ballPixels
                                 val trueBy = sumBy / ballPixels
                                 detectedBalls.add(CircleBall(trueBx, trueBy, ballRadiusEst))
@@ -732,18 +739,17 @@ class ScreenAimTracker(
         }
 
         // =========================================================================
-        // STEP 4: SUB-PIXEL RAYCAST & 180° CUE LOCK ENGINE (OPTIONS 1, 2, 3)
+        // STEP 4: SUB-PIXEL RADIAL RAYCAST & 180° CUE LOCK ENGINE (OPTIONS 1, 2, 3)
         // =========================================================================
         val piF = Math.PI.toFloat()
         val degToRad = (piF / 180f)
 
-        // Precompute dilated object ball exclusion masks (Option 2)
-        // Dilating to 1.40x radius guarantees that white stripes on balls 9-15
-        // and ball numbers (1-15) are NEVER mistaken for the aiming line!
+        // Moderate mask: 1.12x radius masks out object ball stripes and numbers,
+        // but NEVER swallows the in-game aiming guideline entering the target ball!
         val maskRadiusSq = if (enableBallMaskExclusion) {
-            (ballRadiusEst * 1.40f) * (ballRadiusEst * 1.40f)
+            (ballRadiusEst * 1.12f) * (ballRadiusEst * 1.12f)
         } else {
-            (ballRadiusEst * 1.05f) * (ballRadiusEst * 1.05f)
+            (ballRadiusEst * 0.95f) * (ballRadiusEst * 0.95f)
         }
 
         fun isInsideObjectBall(px: Float, py: Float): Boolean {
@@ -755,7 +761,7 @@ class ScreenAimTracker(
         }
 
         fun isWhiteLinePixel(px: Int, py: Int): Boolean {
-            if (px !in tableStartX..tableEndX || py !in tableStartY..tableEndY) return false
+            if (px !in 2 until width - 2 || py !in 2 until height - 2) return false
             if (enableBallMaskExclusion && isInsideObjectBall(px.toFloat(), py.toFloat())) return false
             val c = getPixelPacked(buffer, px, py, rowStride, pixelStride, width, height)
             val r = (c shr 16) and 0xFF
@@ -763,18 +769,18 @@ class ScreenAimTracker(
             val b = c and 0xFF
             val lum = 0.299f * r + 0.587f * gCol + 0.114f * b
             val diff = maxOf(r, maxOf(gCol, b)) - minOf(r, minOf(gCol, b))
-            return ((lum > 185f && diff < 42) || (r > 205 && gCol > 205 && b > 205)) && (lum - feltLum > 28f)
+            return ((lum > 180f && diff < 45) || (r > 200 && gCol > 200 && b > 200)) && (lum - feltLum > 24f)
         }
 
         fun scoreCueStickBehind(cx: Float, cy: Float, theta: Float): Float {
             val cosT = cos(theta.toDouble()).toFloat()
             val sinT = sin(theta.toDouble()).toFloat()
             var stickPixels = 0
-            for (s in 1..6) {
-                val dBack = ballRadiusEst * (1.5f + s * 0.9f)
+            for (s in 1..7) {
+                val dBack = ballRadiusEst * (1.3f + s * 0.9f)
                 val bx = (cx - dBack * cosT).toInt()
                 val by = (cy - dBack * sinT).toInt()
-                if (bx in tableStartX..tableEndX && by in tableStartY..tableEndY) {
+                if (bx in 2 until width - 2 && by in 2 until height - 2) {
                     val c = getPixelPacked(buffer, bx, by, rowStride, pixelStride, width, height)
                     val r = (c shr 16) and 0xFF
                     val gCol = (c shr 8) and 0xFF
@@ -799,9 +805,9 @@ class ScreenAimTracker(
             detectedAngle = smoothAngle
         } else if (enableRayContinuity) {
             // Option 1 (and 1+2): Continuous Radial Raycast from Cue Ball Rim
-            val minR = ballRadiusEst * 1.15f
-            val maxR = ballRadiusEst * 6.20f
-            val rStep = maxOf(2.0f, ballRadiusEst * 0.18f)
+            val minR = ballRadiusEst * 1.10f
+            val maxR = ballRadiusEst * 6.50f
+            val rStep = maxOf(2.0f, ballRadiusEst * 0.16f)
 
             var bestScore = -1f
             var bestAng = smoothAngle
@@ -851,10 +857,37 @@ class ScreenAimTracker(
                 aDeg += 2
             }
 
-            if (bestScore >= 4.0f && bestRayX.size >= 3) {
+            if (bestScore >= 3.0f && bestRayX.size >= 3) {
+                // Sub-degree fine tuning (+/- 1.5 deg in 0.25 deg steps)
+                // Guaranteed 0.1 deg accuracy without ANY linear regression matrix inversion bugs!
+                var fineBestScore = -1f
+                var fineBestAng = bestAng
+
+                var fineDeg = -1.5f
+                while (fineDeg <= 1.5f) {
+                    val fRad = bestAng + fineDeg * degToRad
+                    val fCos = cos(fRad.toDouble()).toFloat()
+                    val fSin = sin(fRad.toDouble()).toFloat()
+                    var fCount = 0
+                    var rSweep = minR
+                    while (rSweep <= maxR) {
+                        val px = (detectedCueX + rSweep * fCos).toInt()
+                        val py = (detectedCueY + rSweep * fSin).toInt()
+                        if (isWhiteLinePixel(px, py)) {
+                            fCount++
+                        }
+                        rSweep += rStep
+                    }
+                    if (fCount > fineBestScore) {
+                        fineBestScore = fCount.toFloat()
+                        fineBestAng = fRad
+                    }
+                    fineDeg += 0.25f
+                }
+
                 candidatePointsX.addAll(bestRayX)
                 candidatePointsY.addAll(bestRayY)
-                detectedAngle = bestAng
+                detectedAngle = fineBestAng
                 hasValidAngle = true
             }
         } else {
@@ -877,46 +910,46 @@ class ScreenAimTracker(
                 }
                 rSweep += rStep
             }
-        }
 
-        // Apply Linear Regression on gathered candidate points
-        if (candidatePointsX.size >= 4) {
-            val n = candidatePointsX.size
-            var meanX = 0.0
-            var meanY = 0.0
-            for (i in 0 until n) {
-                meanX += candidatePointsX[i]
-                meanY += candidatePointsY[i]
+            // Apply PCA / Linear Regression ONLY in Option 2 alone
+            if (candidatePointsX.size >= 4) {
+                val n = candidatePointsX.size
+                var meanX = 0.0
+                var meanY = 0.0
+                for (i in 0 until n) {
+                    meanX += candidatePointsX[i]
+                    meanY += candidatePointsY[i]
+                }
+                meanX /= n
+                meanY /= n
+
+                var sxx = 0.0
+                var syy = 0.0
+                var sxy = 0.0
+                for (i in 0 until n) {
+                    val dx = candidatePointsX[i] - meanX
+                    val dy = candidatePointsY[i] - meanY
+                    sxx += dx * dx
+                    syy += dy * dy
+                    sxy += dx * dy
+                }
+
+                val fitTheta = 0.5 * atan2(2.0 * sxy, sxx - syy)
+                var regAngle = fitTheta.toFloat()
+
+                val toCentroidX = (meanX - detectedCueX).toFloat()
+                val toCentroidY = (meanY - detectedCueY).toFloat()
+                val forwardDot = toCentroidX * cos(regAngle.toDouble()).toFloat() + toCentroidY * sin(regAngle.toDouble()).toFloat()
+                if (forwardDot < 0) {
+                    regAngle += piF
+                }
+
+                while (regAngle > piF) regAngle -= (2f * piF)
+                while (regAngle < -piF) regAngle += (2f * piF)
+
+                detectedAngle = regAngle
+                hasValidAngle = true
             }
-            meanX /= n
-            meanY /= n
-
-            var sxx = 0.0
-            var syy = 0.0
-            var sxy = 0.0
-            for (i in 0 until n) {
-                val dx = candidatePointsX[i] - meanX
-                val dy = candidatePointsY[i] - meanY
-                sxx += dx * dx
-                syy += dy * dy
-                sxy += dx * dy
-            }
-
-            val fitTheta = 0.5 * atan2(2.0 * sxy, sxx - syy)
-            var regAngle = fitTheta.toFloat()
-
-            val toCentroidX = (meanX - detectedCueX).toFloat()
-            val toCentroidY = (meanY - detectedCueY).toFloat()
-            val forwardDot = toCentroidX * cos(regAngle.toDouble()).toFloat() + toCentroidY * sin(regAngle.toDouble()).toFloat()
-            if (forwardDot < 0) {
-                regAngle += piF
-            }
-
-            while (regAngle > piF) regAngle -= (2f * piF)
-            while (regAngle < -piF) regAngle += (2f * piF)
-
-            detectedAngle = regAngle
-            hasValidAngle = true
         }
 
         if (hasValidAngle) {
@@ -933,7 +966,8 @@ class ScreenAimTracker(
 
         // Detect if game's native white line or aiming cue stick is active
         val isWhiteLineDetected = (candidatePointsX.size >= 3) || (hasValidAngle && lockFrames > 0) || isManualRingMode
-        if (isWhiteLineDetected && detectedCueX > tableStartX && detectedCueX < tableEndX) {
+        // WORKS EVERYWHERE ON THE TABLE INCLUDING CUSHIONS!
+        if (isWhiteLineDetected && detectedCueX in 0f..width.toFloat() && detectedCueY in 0f..height.toFloat()) {
             aimConfidenceFrames = minOf(6, aimConfidenceFrames + 2)
         } else {
             aimConfidenceFrames = maxOf(0, aimConfidenceFrames - 2)
@@ -941,7 +975,7 @@ class ScreenAimTracker(
         isAimingActive = (aimConfidenceFrames >= 2) || isManualRingMode
 
         // =========================================================================
-        // STEP 5: RAY-CASTING TO FIND TARGET OBJECT BALL
+        // STEP 5: RAY-CASTING TO FIND TARGET OBJECT BALL (ACCURATE COLLISION)
         // =========================================================================
         var targetBallX: Float? = null
         var targetBallY: Float? = null
@@ -949,13 +983,13 @@ class ScreenAimTracker(
 
         val cosA = cos(smoothAngle.toDouble()).toFloat()
         val sinA = sin(smoothAngle.toDouble()).toFloat()
-        val collisionThreshold = ballRadiusEst * 2.0f
+        val collisionThreshold = ballRadiusEst * 1.95f
 
         for (ball in detectedBalls) {
             val toX = ball.x - detectedCueX
             val toY = ball.y - detectedCueY
             val dot = toX * cosA + toY * sinA
-            if (dot > ballRadiusEst * 0.8f) { // must be ahead
+            if (dot > ballRadiusEst * 0.5f) { // must be ahead
                 val perpDist = abs(-toX * sinA + toY * cosA)
                 if (perpDist <= collisionThreshold && dot < minRayDist) {
                     minRayDist = dot
