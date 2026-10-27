@@ -205,6 +205,11 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private fun requestScreenCapture() {
+        val mediaProjectionManager = getSystemService(Context.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
+        screenCaptureLauncher.launch(mediaProjectionManager.createScreenCaptureIntent())
+    }
+
     @SuppressLint("BatteryLife")
     private fun requestIgnoreBatteryOptimizations() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
