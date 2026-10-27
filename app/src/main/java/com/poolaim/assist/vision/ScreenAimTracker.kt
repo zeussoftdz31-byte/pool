@@ -214,7 +214,7 @@ class ScreenAimTracker(
         val feltG = sumFeltG / 5
         val feltB = sumFeltB / 5
 
-        inline fun isFelt(color: Int): Boolean {
+        fun isFelt(color: Int): Boolean {
             val r = (color shr 16) and 0xFF
             val g = (color shr 8) and 0xFF
             val b = color and 0xFF
