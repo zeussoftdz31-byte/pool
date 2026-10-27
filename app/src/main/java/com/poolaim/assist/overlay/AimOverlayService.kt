@@ -20,6 +20,7 @@ import android.view.*
 import android.widget.SeekBar
 import android.widget.TextView
 import android.widget.Toast
+import android.provider.Settings
 import androidx.appcompat.widget.SwitchCompat
 import androidx.core.app.NotificationCompat
 import com.poolaim.assist.R
