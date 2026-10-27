@@ -171,7 +171,8 @@ class LineIntersection(
             var currY = startY
             var currAngle = angleDeg
             var remainingDist = totalDistance
-            val pocketThreshold = ballRadius * 1.6f * pocketScale
+            // Realistic pocket jaw opening threshold (1.15x ball radius)
+            val pocketThreshold = ballRadius * 1.15f * pocketScale
 
             var stopX = startX
             var stopY = startY

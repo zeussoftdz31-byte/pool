@@ -365,8 +365,8 @@ class AimCanvasView(context: Context) : View(context) {
 
         tableBounds.set(tableLeft, tableTop, tableRight, tableBottom)
 
-        // Exact physical ball radius: a standard pool ball is 1/18.5 of table height
-        ballRadius = tableH / 18.5f
+        // Exact physical ball radius: in 8 Ball Pool, 16.5 balls fit vertically (radius = tableH / 33.0)
+        ballRadius = tableH / 33.0f
 
         updatePockets()
 
@@ -386,15 +386,13 @@ class AimCanvasView(context: Context) : View(context) {
         val b = tableBounds.bottom
         val midX = (l + r) / 2f
 
-        // Corner pockets are slightly inset along diagonal into the funnel mouth
-        val cornerInset = ballRadius * 0.15f
-
-        pockets.add(Vector2D(l + cornerInset, t + cornerInset))       // 0: Top-Left
-        pockets.add(Vector2D(midX, t))                                 // 1: Top-Center
-        pockets.add(Vector2D(r - cornerInset, t + cornerInset))       // 2: Top-Right
-        pockets.add(Vector2D(l + cornerInset, b - cornerInset))       // 3: Bottom-Left
-        pockets.add(Vector2D(midX, b))                                 // 4: Bottom-Center
-        pockets.add(Vector2D(r - cornerInset, b - cornerInset))       // 5: Bottom-Right
+        // Pocket mouth centers aligned with cushion corners
+        pockets.add(Vector2D(l, t))       // 0: Top-Left
+        pockets.add(Vector2D(midX, t))    // 1: Top-Center
+        pockets.add(Vector2D(r, t))       // 2: Top-Right
+        pockets.add(Vector2D(l, b))       // 3: Bottom-Left
+        pockets.add(Vector2D(midX, b))    // 4: Bottom-Center
+        pockets.add(Vector2D(r, b))       // 5: Bottom-Right
     }
 
     fun updateAutoAim(
@@ -515,44 +513,65 @@ class AimCanvasView(context: Context) : View(context) {
         }
 
         val target = targetBallPos
+        var isTargetHit = false
+        var ghostX = 0f
+        var ghostY = 0f
+        var ghostDist = 0f
+        var exitDx = 0f
+        var exitDy = 0f
+        var exitLen = 0.001f
+        var exitAngleDeg = 0f
+        var targetDistance = 0f
+        var cueDeflectionDistance = 0f
 
         if (target != null) {
-            // ========================================================
-            // SCENARIO A: Target Ball is Detected along Aim Line
-            // ========================================================
-
             val deltaX = target.x - cueBallPos.x
             val deltaY = target.y - cueBallPos.y
-            val distToTarget = hypot(deltaX, deltaY)
+            val proj = deltaX * dirX + deltaY * dirY
 
-            val ghostDist = max(0f, distToTarget - ballRadius * 2.0f)
-            val ghostX = cueBallPos.x + dirX * ghostDist
-            val ghostY = cueBallPos.y + dirY * ghostDist
+            val twoR = ballRadius * 2.0f
+            val twoRSq = twoR * twoR
+            val distSq = deltaX * deltaX + deltaY * deltaY
+            val perpSq = max(0f, distSq - proj * proj)
+
+            // Exact mathematical condition for cue ball colliding with target ball along ray
+            if (proj > ballRadius * 0.4f && perpSq <= twoRSq) {
+                isTargetHit = true
+                ghostDist = max(0f, proj - sqrt(twoRSq - perpSq))
+                ghostX = cueBallPos.x + dirX * ghostDist
+                ghostY = cueBallPos.y + dirY * ghostDist
+
+                // Vector from ghost ball center to target ball center at impact
+                exitDx = target.x - ghostX
+                exitDy = target.y - ghostY
+                exitLen = max(0.001f, hypot(exitDx, exitDy))
+
+                exitAngleDeg = Math.toDegrees(atan2(-exitDy.toDouble(), exitDx.toDouble())).toFloat()
+                if (exitAngleDeg < 0f) exitAngleDeg += 360f
+
+                // Cut Angle & Momentum Transfer:
+                // Dot product between cue incoming vector and exit vector gives cos(cutAngle)
+                val cosCut = ((dirX * exitDx + dirY * exitDy) / exitLen).coerceIn(0f, 1f)
+                val sinCut = sqrt(max(0f, 1f - cosCut * cosCut))
+
+                // Energy distributed between target ball and cue ball deflection
+                val targetEnergyRatio = cosCut * cosCut
+                val cueEnergyRatio = sinCut * sinCut
+
+                val remainingEnergyDist = max(0f, totalDistance - ghostDist)
+                targetDistance = remainingEnergyDist * targetEnergyRatio
+                cueDeflectionDistance = remainingEnergyDist * cueEnergyRatio
+            }
+        }
+
+        if (isTargetHit && target != null) {
+            // ========================================================
+            // SCENARIO A: Target Ball is Hit along Aim Line
+            // ========================================================
 
             // Draw line from cue ball to ghost ball
             canvas.drawLine(cueBallPos.x, cueBallPos.y, ghostX, ghostY, directAimPaint)
             canvas.drawCircle(ghostX, ghostY, ballRadius, ghostBallPaint)
-
-            // Cut Angle & Momentum Transfer:
-            // Vector from ghost ball center to target ball center
-            val exitDx = target.x - ghostX
-            val exitDy = target.y - ghostY
-            val exitLen = max(0.001f, hypot(exitDx, exitDy))
-
-            var exitAngleDeg = Math.toDegrees(atan2(-exitDy.toDouble(), exitDx.toDouble())).toFloat()
-            if (exitAngleDeg < 0f) exitAngleDeg += 360f
-
-            // Dot product between cue incoming vector and exit vector gives cos(cutAngle)
-            val cosCut = ((dirX * exitDx + dirY * exitDy) / exitLen).coerceIn(0f, 1f)
-            val sinCut = sqrt(max(0f, 1f - cosCut * cosCut))
-
-            // Energy distributed between target ball and cue ball deflection
-            val targetEnergyRatio = cosCut * cosCut
-            val cueEnergyRatio = sinCut * sinCut
-
-            val remainingEnergyDist = max(0f, totalDistance - ghostDist)
-            val targetDistance = remainingEnergyDist * targetEnergyRatio
-            val cueDeflectionDistance = remainingEnergyDist * cueEnergyRatio
 
             val maxBounces = if (enableBankShots) 4 else 0
 
