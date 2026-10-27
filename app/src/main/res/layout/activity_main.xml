@@ -231,6 +231,109 @@
         </com.google.android.material.card.MaterialCardView>
 
         <!-- ========================================== -->
+        <!-- VIP LICENSE & SERIAL KEY CARD              -->
+        <!-- ========================================== -->
+        <com.google.android.material.card.MaterialCardView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            app:cardCornerRadius="16dp"
+            app:cardBackgroundColor="@color/bg_card"
+            app:strokeColor="@color/border_card"
+            app:strokeWidth="1dp"
+            android:layout_marginBottom="16dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="16dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical"
+                    android:layout_marginBottom="8dp">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="👑 حالة اشتراك VIP والسيريال"
+                        android:textColor="@color/accent_gold"
+                        android:textSize="14sp"
+                        android:textStyle="bold" />
+
+                    <View
+                        android:layout_width="0dp"
+                        android:layout_height="1dp"
+                        android:layout_weight="1" />
+
+                    <TextView
+                        android:id="@+id/tvDeviceId"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="HWID: DEV-XXXX"
+                        android:textColor="@color/text_muted"
+                        android:textSize="11sp" />
+                </LinearLayout>
+
+                <TextView
+                    android:id="@+id/tvLicenseStatus"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="🟢 اشتراك VIP نشط: 365 يوم متبقية"
+                    android:textColor="@color/accent_green"
+                    android:textSize="13sp"
+                    android:textStyle="bold"
+                    android:layout_marginBottom="8dp" />
+
+                <!-- Serial Input Field & Button -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical">
+
+                    <EditText
+                        android:id="@+id/etSerialKey"
+                        android:layout_width="0dp"
+                        android:layout_height="44dp"
+                        android:layout_weight="1"
+                        android:background="@drawable/bg_mod_menu_card"
+                        android:hint="أدخل رمز السيريال (مثال: AIM-VIP-2026-PRO)"
+                        android:textColorHint="@color/text_muted"
+                        android:textColor="@color/white"
+                        android:textSize="12sp"
+                        android:paddingStart="12dp"
+                        android:paddingEnd="12dp"
+                        android:maxLines="1"
+                        android:inputType="textCapCharacters" />
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btnActivateSerial"
+                        android:layout_width="wrap_content"
+                        android:layout_height="44dp"
+                        android:text="تفعيل"
+                        android:textColor="@color/bg_dark"
+                        android:textSize="12sp"
+                        android:textStyle="bold"
+                        app:backgroundTint="@color/accent_gold"
+                        app:cornerRadius="10dp"
+                        android:layout_marginStart="8dp" />
+                </LinearLayout>
+
+                <TextView
+                    android:id="@+id/btnGenerateTrialKey"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="⚡ توليد مفتاح تجريبي إضافي (30 يوماً)"
+                    android:textColor="@color/accent_cyan"
+                    android:textSize="11sp"
+                    android:layout_marginTop="8dp" />
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
+
+        <!-- ========================================== -->
         <!-- MAIN LAUNCHER ACTION BUTTONS               -->
         <!-- ========================================== -->
         <com.google.android.material.button.MaterialButton

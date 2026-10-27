@@ -29,19 +29,21 @@ import android.util.Log
  *    - Overlay Permission (SYSTEM_ALERT_WINDOW)
  *    - Screen Capture AI Engine (MediaProjection)
  *    - Ignore Battery Optimizations (Anti-Freeze & Anti-Close Protection)
- * 2. Instant In-Game Guidelines configuration synchronized with AppSettings:
+ * 2. Subscription & Serial Key Management (LicenseManager)
+ * 3. Instant In-Game Guidelines configuration synchronized with AppSettings:
  *    - 3-Lines Mode (Super Line)
  *    - Cushion Bank Shots
  *    - Ghost Ball Visualization
  *    - Pocket Target Lock
  *    - Auto-Hide in Lobby
  *    - Laser Color & Thickness
- * 3. Quick Game Launcher for 8 Ball Pool.
+ * 4. Quick Game Launcher for 8 Ball Pool.
  */
 class MainActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityMainBinding
     private lateinit var settings: AppSettings
+    private lateinit var licenseManager: LicenseManager
 
     private val overlayPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult()
@@ -81,16 +83,53 @@ class MainActivity : AppCompatActivity() {
         }
 
         settings = AppSettings.get(this)
+        licenseManager = LicenseManager.get(this)
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
+        initLicenseUI()
         initSettingsUI()
         setupListeners()
     }
 
     override fun onResume() {
         super.onResume()
+        updateLicenseDisplay()
         updateUIState()
+    }
+
+    private fun initLicenseUI() {
+        binding.tvDeviceId.text = "HWID: ${licenseManager.getDeviceId()}"
+        updateLicenseDisplay()
+
+        binding.btnActivateSerial.setOnClickListener {
+            val key = binding.etSerialKey.text.toString()
+            val (success, msg) = licenseManager.activateSerial(key)
+            Toast.makeText(this, msg, Toast.LENGTH_LONG).show()
+            if (success) {
+                binding.etSerialKey.text?.clear()
+                updateLicenseDisplay()
+                updateUIState()
+            }
+        }
+
+        binding.btnGenerateTrialKey.setOnClickListener {
+            val generatedKey = licenseManager.generateSerialKey(30)
+            binding.etSerialKey.setText(generatedKey)
+            Toast.makeText(this, "تم توليد مفتاح 30 يوماً! اضغط 'تفعيل' للاشتراك", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    private fun updateLicenseDisplay() {
+        val isVip = licenseManager.isVipActive()
+        val remaining = licenseManager.getRemainingTimeString()
+        if (isVip) {
+            binding.tvLicenseStatus.text = "🟢 اشتراك VIP نشط: $remaining"
+            binding.tvLicenseStatus.setTextColor(ContextCompat.getColor(this, R.color.accent_green))
+        } else {
+            binding.tvLicenseStatus.text = "🔴 انتهت صلاحية الاشتراك • يرجى إدخال سيريال جديد"
+            binding.tvLicenseStatus.setTextColor(ContextCompat.getColor(this, R.color.accent_red))
+        }
     }
 
     private fun initSettingsUI() {
@@ -155,6 +194,11 @@ class MainActivity : AppCompatActivity() {
         }
 
         binding.btnStartOverlay.setOnClickListener {
+            if (!licenseManager.isVipActive()) {
+                Toast.makeText(this, "انتهت فترة التجربة! يرجى إدخال وتفعيل رمز سيريال VIP للمتابعة", Toast.LENGTH_LONG).show()
+                return@setOnClickListener
+            }
+
             if (!checkOverlayPermission()) {
                 requestOverlayPermission()
                 Toast.makeText(this, "يرجى تفعيل إذن الظهور فوق التطبيقات أولاً", Toast.LENGTH_SHORT).show()
