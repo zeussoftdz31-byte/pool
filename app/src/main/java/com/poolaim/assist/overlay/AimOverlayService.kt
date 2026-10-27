@@ -201,20 +201,6 @@ class AimOverlayService : Service(), SensorEventListener {
             val layoutExpandedMenu = modMenuView?.findViewById<View>(R.id.layoutExpandedMenu)
             val btnMinimizeMenu = modMenuView?.findViewById<View>(R.id.btnMinimizeMenu)
 
-            val switchPowerSimulation = modMenuView?.findViewById<SwitchCompat>(R.id.switchPowerSimulation)
-            val switchBankShots = modMenuView?.findViewById<SwitchCompat>(R.id.switchBankShots)
-            val switchCueBallPath = modMenuView?.findViewById<SwitchCompat>(R.id.switchCueBallPath)
-            val switch6Pockets = modMenuView?.findViewById<SwitchCompat>(R.id.switch6Pockets)
-            val switchPocketGlow = modMenuView?.findViewById<SwitchCompat>(R.id.switchPocketGlow)
-
-            val btnThemeGreen = modMenuView?.findViewById<View>(R.id.btnThemeGreen)
-            val btnThemeCyan = modMenuView?.findViewById<View>(R.id.btnThemeCyan)
-            val btnThemeGold = modMenuView?.findViewById<View>(R.id.btnThemeGold)
-            val btnThemeRed = modMenuView?.findViewById<View>(R.id.btnThemeRed)
-
-            val btnQuickToggleLines = modMenuView?.findViewById<View>(R.id.btnQuickToggleLines)
-            val btnToggleVisibility = modMenuView?.findViewById<View>(R.id.btnToggleVisibility)
-            val btnCloseMod = modMenuView?.findViewById<View>(R.id.btnCloseMod)
 
             // Draggable Floating Pill / Menu
             var initialX = 0
@@ -501,19 +487,10 @@ class AimOverlayService : Service(), SensorEventListener {
         canvasView?.isMasterOverlayEnabled = overlayVisible
         aimTracker?.isAutoTrackingEnabled = overlayVisible
 
-        val cardMasterSwitch = modMenuView?.findViewById<View>(R.id.cardMasterSwitch)
         val switchMasterAim = modMenuView?.findViewById<SwitchCompat>(R.id.switchMasterAim)
-        val tvMasterStatus = modMenuView?.findViewById<TextView>(R.id.tvMasterStatus)
+        val switchAutoAim = modMenuView?.findViewById<SwitchCompat>(R.id.switchAutoAim)
         switchMasterAim?.isChecked = overlayVisible
-        if (overlayVisible) {
-            tvMasterStatus?.text = "🟢 الخطوط والثقوب مشتعلة الآن (ON)"
-            tvMasterStatus?.setTextColor(Color.parseColor("#A7F3D0"))
-            cardMasterSwitch?.setBackgroundColor(Color.parseColor("#14532D"))
-        } else {
-            tvMasterStatus?.text = "🔴 الخطوط والثقوب مطفأة (OFF)"
-            tvMasterStatus?.setTextColor(Color.parseColor("#F87171"))
-            cardMasterSwitch?.setBackgroundColor(Color.parseColor("#450A0A"))
-        }
+        switchAutoAim?.isChecked = overlayVisible
         canvasView?.postInvalidate()
     }
 
