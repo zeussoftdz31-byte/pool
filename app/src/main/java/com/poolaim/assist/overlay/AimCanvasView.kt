@@ -28,6 +28,7 @@ import kotlin.math.*
 class AimCanvasView(context: Context) : View(context) {
 
     // Live Aim State from Computer Vision
+    var isMatchDetected = false // Only true during a live 8 Ball Pool match!
     var isAutoAimActive = false
     var cueBallPos = Vector2D(500f, 500f)
     var aimAngleRad = 0f
@@ -400,14 +401,23 @@ class AimCanvasView(context: Context) : View(context) {
         cue: Vector2D,
         angleRad: Float,
         power: Float,
-        target: Vector2D?
+        target: Vector2D?,
+        matchActive: Boolean = true
     ) {
+        isMatchDetected = matchActive
         isAutoAimActive = true
         cueBallPos = cue
         aimAngleRad = angleRad
         shotPowerPercent = power
         targetBallPos = target
         postInvalidate()
+    }
+
+    fun setMatchActive(active: Boolean) {
+        if (isMatchDetected != active) {
+            isMatchDetected = active
+            postInvalidate()
+        }
     }
 
     fun setThemeColor(colorIdx: Int) {
@@ -465,6 +475,12 @@ class AimCanvasView(context: Context) : View(context) {
 
         // Master Switch: Stop drawing if disabled
         if (!isMasterOverlayEnabled) return
+
+        // CRITICAL: DO NOT DRAW LINES OR POCKETS UNLESS A MATCH IS ACTIVE!
+        // Outside of a live match (in lobby, phone launcher, rewards), draw NOTHING!
+        if (!isMatchDetected && !isCalibrationModeActive) {
+            return
+        }
 
         // Interactive Calibration Mode
         if (isCalibrationModeActive) {

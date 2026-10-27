@@ -21,12 +21,12 @@ import android.widget.SeekBar
 import android.widget.TextView
 import android.widget.Toast
 import android.provider.Settings
+import androidx.appcompat.view.ContextThemeWrapper
 import androidx.appcompat.widget.SwitchCompat
 import androidx.core.app.NotificationCompat
 import com.poolaim.assist.R
 import com.poolaim.assist.physics.Vector2D
 import com.poolaim.assist.vision.ScreenAimTracker
-import org.opencv.android.OpenCVLoader
 import kotlin.math.*
 
 /**
@@ -76,13 +76,6 @@ class AimOverlayService : Service(), SensorEventListener {
     override fun onCreate() {
         super.onCreate()
         try {
-            // Initialize OpenCV 4.9.0 native C++ acceleration engine safely
-            try {
-                OpenCVLoader.initLocal()
-            } catch (e: Throwable) {
-                e.printStackTrace()
-            }
-
             windowManager = getSystemService(Context.WINDOW_SERVICE) as WindowManager
             createNotificationChannel()
 
@@ -158,7 +151,8 @@ class AimOverlayService : Service(), SensorEventListener {
     @SuppressLint("InflateParams")
     private fun initCanvasOverlay() {
         try {
-            canvasView = AimCanvasView(this)
+            val themeWrapper = ContextThemeWrapper(this, R.style.Theme_PoolAimAssist)
+            canvasView = AimCanvasView(themeWrapper)
 
             val layoutType = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
@@ -189,7 +183,8 @@ class AimOverlayService : Service(), SensorEventListener {
     @SuppressLint("ClickableViewAccessibility", "InflateParams")
     private fun initModMenu() {
         try {
-            val inflater = LayoutInflater.from(this)
+            val themeWrapper = ContextThemeWrapper(this, R.style.Theme_PoolAimAssist)
+            val inflater = LayoutInflater.from(themeWrapper)
             modMenuView = inflater.inflate(R.layout.overlay_mod_menu, null)
 
             val layoutType = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -636,9 +631,14 @@ class AimOverlayService : Service(), SensorEventListener {
                             cueBallPos: Vector2D,
                             aimAngleRad: Float,
                             powerPercent: Float,
-                            targetBallPos: Vector2D?
+                            targetBallPos: Vector2D?,
+                            matchDetected: Boolean
                         ) {
-                            canvasView?.updateAutoAim(cueBallPos, aimAngleRad, powerPercent, targetBallPos)
+                            canvasView?.updateAutoAim(cueBallPos, aimAngleRad, powerPercent, targetBallPos, matchDetected)
+                        }
+
+                        override fun onMatchStateChanged(isMatch: Boolean) {
+                            canvasView?.setMatchActive(isMatch)
                         }
                     })
                     aimTracker?.start()
