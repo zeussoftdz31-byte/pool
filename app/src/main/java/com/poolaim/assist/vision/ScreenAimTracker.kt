@@ -531,9 +531,8 @@ class ScreenAimTracker(
         var detectedCueX = -1f
         var detectedCueY = -1f
 
-        // Fast Path: Search and smoothly track around last locked position
-        if (isLockedOnCue && lockedCueX in (tableStartX - 6)..(tableEndX + 6) &&
-            lockedCueY in (tableStartY - 6)..(tableEndY + 6)
+        if (isLockedOnCue && lockedCueX >= (tableStartX - 6) && lockedCueX <= (tableEndX + 6) &&
+            lockedCueY >= (tableStartY - 6) && lockedCueY <= (tableEndY + 6)
         ) {
             var sumX = 0f
             var sumY = 0f
