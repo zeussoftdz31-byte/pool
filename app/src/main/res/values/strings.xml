@@ -1,14 +1,14 @@
 <resources>
-    <string name="app_name">Pool Aim Master Pro</string>
-    <string name="overlay_permission_title">صلاحية الظهور فوق التطبيقات (Overlay)</string>
-    <string name="overlay_permission_desc">يحتاج التطبيق لإذن الظهور فوق الألعاب لرسم خطوط التوجيه المباشرة أثناء اللعب</string>
-    <string name="grant_permission">منح الإذن الآن</string>
-    <string name="start_aim_assist">تشغيل المساعد المباشر (Start Overlay)</string>
-    <string name="stop_aim_assist">إيقاف المساعد (Stop)</string>
-    <string name="settings_title">إعدادات خطوط التوجيه والفيزياء</string>
-    <string name="line_color">لون الخط الرئيسي</string>
-    <string name="bounce_lines">عدد ارتدادات الجدار (Cushion Bounces)</string>
-    <string name="cue_power_factor">حساسية قوة الضربة ونقطة التوقف</string>
-    <string name="status_ready">الحالة: جاهز للتشغيل فوق اللعبة</string>
-    <string name="status_running">الحالة: المساعد يعمل لايف الآن</string>
+    <string name="app_name">Aiming Master</string>
+    <string name="app_subtitle">AI Real-Time Guideline Tool for 8 Ball Pool</string>
+    <string name="overlay_permission_title">الظهور فوق التطبيقات (Overlay)</string>
+    <string name="overlay_permission_desc">مطلوب لعرض خطوط الليزر ومسارات الارتداد مباشرة فوق شاشة اللعبة</string>
+    <string name="screen_capture_title">التعرف الذكي على الشاشة (AI Vision)</string>
+    <string name="screen_capture_desc">مطلوب لقراءة موقع الكرة البيضاء والعصا والكرات وتحديث الخطوط لحظياً</string>
+    <string name="battery_opt_title">إلغاء قيود توفير الطاقة (Anti-Freeze)</string>
+    <string name="battery_opt_desc">يمنع أندرويد من تجميد المساعد أو إغلاقه عند تشغيل لعبة 8 Ball Pool</string>
+    <string name="grant_permission">تفعيل الإذن</string>
+    <string name="start_aim_assist">▶ تشغيل AIMING MASTER</string>
+    <string name="stop_aim_assist">⏹ إيقاف المساعد (STOP)</string>
+    <string name="launch_game">🎱 فتح لعبة 8 Ball Pool</string>
 </resources>

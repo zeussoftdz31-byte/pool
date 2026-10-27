@@ -1,14 +1,18 @@
 package com.poolaim.assist
 
+import android.annotation.SuppressLint
 import android.app.Activity
 import android.content.Context
 import android.content.Intent
+import android.graphics.Color
 import android.media.projection.MediaProjectionManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.os.PowerManager
 import android.provider.Settings
 import android.view.View
+import android.widget.SeekBar
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
@@ -18,20 +22,31 @@ import com.poolaim.assist.overlay.AimOverlayService
 import android.util.Log
 
 /**
- * Main Launcher Activity.
- * - Handles Android Overlay Permissions (SYSTEM_ALERT_WINDOW).
- * - Requests MediaProjection screen capture permission for real-time automatic cue & ball tracking.
- * - Starts / Stops the Live Automatic Aim Assist Service.
+ * Aiming Master - Professional Main Activity Dashboard
+ * 
+ * Features:
+ * 1. 3-Step Setup Assistant:
+ *    - Overlay Permission (SYSTEM_ALERT_WINDOW)
+ *    - Screen Capture AI Engine (MediaProjection)
+ *    - Ignore Battery Optimizations (Anti-Freeze & Anti-Close Protection)
+ * 2. Instant In-Game Guidelines configuration synchronized with AppSettings:
+ *    - 3-Lines Mode (Super Line)
+ *    - Cushion Bank Shots
+ *    - Ghost Ball Visualization
+ *    - Pocket Target Lock
+ *    - Auto-Hide in Lobby
+ *    - Laser Color & Thickness
+ * 3. Quick Game Launcher for 8 Ball Pool.
  */
 class MainActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityMainBinding
-    private var isServiceRunning = false
+    private lateinit var settings: AppSettings
 
     private val overlayPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult()
     ) {
-        updatePermissionStatus()
+        updateUIState()
     }
 
     private val screenCaptureLauncher = registerForActivityResult(
@@ -43,53 +58,106 @@ class MainActivity : AppCompatActivity() {
                 putExtra(AimOverlayService.EXTRA_RESULT_DATA, result.data)
             }
             ContextCompat.startForegroundService(this, serviceIntent)
-            isServiceRunning = true
-
-            binding.btnStartOverlay.visibility = View.GONE
-            binding.btnStopOverlay.visibility = View.VISIBLE
-            binding.tvOverlayStatus.text = "🟢 المساعد المباشر ومحرك التتبع يعملان بنجاح • المود منيو 🎯 ظاهر الآن"
-            binding.tvOverlayStatus.setTextColor(ContextCompat.getColor(this, R.color.accent_green))
+            updateUIState()
 
             Toast.makeText(
                 this,
-                "🎯 تم تشغيل Aim Master! نافذة المود منيو ظاهرة الآن فوق الشاشة. يمكنك فتح اللعبة في أي وقت 🎱",
+                "🎯 تم تشغيل Aiming Master بنجاح! الأيقونة العائمة جاهزة فوق اللعبة 🎱",
                 Toast.LENGTH_LONG
             ).show()
         } else {
-            Toast.makeText(this, "يلزم السماح ببث الشاشة لتتبع حركة العصا والكرات تلقائياً", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, "يلزم السماح بالتقاط الشاشة لتشغيل محرك التعرف البصري الذكي", Toast.LENGTH_SHORT).show()
         }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        // Global crash guard to prevent silent closes and record exact errors
+        // Crash guard to log and safely catch runtime errors
         val defaultHandler = Thread.getDefaultUncaughtExceptionHandler()
         Thread.setDefaultUncaughtExceptionHandler { thread, throwable ->
-            Log.e("AimMasterCrash", "Uncaught exception in thread ${thread.name}", throwable)
+            Log.e("AimingMaster", "Uncaught exception in thread ${thread.name}", throwable)
             defaultHandler?.uncaughtException(thread, throwable)
         }
 
+        settings = AppSettings.get(this)
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
+        initSettingsUI()
         setupListeners()
     }
 
     override fun onResume() {
         super.onResume()
-        updatePermissionStatus()
+        updateUIState()
+    }
+
+    private fun initSettingsUI() {
+        // Toggles
+        binding.switchThreeLines.isChecked = settings.isThreeLinesEnabled
+        binding.switchCushionShots.isChecked = settings.isCushionShotsEnabled
+        binding.switchGhostBall.isChecked = settings.isGhostBallEnabled
+        binding.switchPocketLock.isChecked = settings.isPocketLockEnabled
+        binding.switchAutoMatch.isChecked = settings.isAutoMatchDetectionEnabled
+
+        binding.switchThreeLines.setOnCheckedChangeListener { _, isChecked ->
+            settings.isThreeLinesEnabled = isChecked
+        }
+        binding.switchCushionShots.setOnCheckedChangeListener { _, isChecked ->
+            settings.isCushionShotsEnabled = isChecked
+        }
+        binding.switchGhostBall.setOnCheckedChangeListener { _, isChecked ->
+            settings.isGhostBallEnabled = isChecked
+        }
+        binding.switchPocketLock.setOnCheckedChangeListener { _, isChecked ->
+            settings.isPocketLockEnabled = isChecked
+        }
+        binding.switchAutoMatch.setOnCheckedChangeListener { _, isChecked ->
+            settings.isAutoMatchDetectionEnabled = isChecked
+        }
+
+        // Thickness Slider
+        val currentThick = settings.lineThickness
+        binding.sbThickness.progress = currentThick.toInt().coerceIn(1, 8)
+        binding.tvThicknessVal.text = String.format("%.1fpx", currentThick)
+
+        binding.sbThickness.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
+                val thickness = progress.coerceAtLeast(1).toFloat()
+                settings.lineThickness = thickness
+                binding.tvThicknessVal.text = String.format("%.1fpx", thickness)
+            }
+            override fun onStartTrackingTouch(seekBar: SeekBar?) {}
+            override fun onStopTrackingTouch(seekBar: SeekBar?) {}
+        })
+
+        // Colors
+        fun selectColor(color: Int, name: String) {
+            settings.lineColor = color
+            Toast.makeText(this, "تم اختيار لون الليزر: $name", Toast.LENGTH_SHORT).show()
+        }
+
+        binding.colorCyan.setOnClickListener { selectColor(AppSettings.COLOR_CYAN, "أزرق فيروزي (Cyan)") }
+        binding.colorGold.setOnClickListener { selectColor(AppSettings.COLOR_GOLD, "أصفر ذهبي (Gold)") }
+        binding.colorGreen.setOnClickListener { selectColor(AppSettings.COLOR_GREEN, "أخضر نيون (Emerald)") }
+        binding.colorPurple.setOnClickListener { selectColor(AppSettings.COLOR_PURPLE, "بنفسجي نيون (Violet)") }
+        binding.colorWhite.setOnClickListener { selectColor(AppSettings.COLOR_WHITE, "أبيض ليزري (Laser White)") }
     }
 
     private fun setupListeners() {
-        binding.btnGrantPermission.setOnClickListener {
+        binding.btnGrantOverlay.setOnClickListener {
             requestOverlayPermission()
+        }
+
+        binding.btnIgnoreBattery.setOnClickListener {
+            requestIgnoreBatteryOptimizations()
         }
 
         binding.btnStartOverlay.setOnClickListener {
             if (!checkOverlayPermission()) {
                 requestOverlayPermission()
-                Toast.makeText(this, "يرجى منح صلاحية الظهور فوق التطبيقات أولاً", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, "يرجى تفعيل إذن الظهور فوق التطبيقات أولاً", Toast.LENGTH_SHORT).show()
                 return@setOnClickListener
             }
 
@@ -106,7 +174,7 @@ class MainActivity : AppCompatActivity() {
             if (launchIntent != null) {
                 startActivity(launchIntent)
             } else {
-                Toast.makeText(this, "افتح لعبة 8 Ball Pool على هاتفك وستجد نافذة المود منيو 🎯 جاهزة ومباشرة فوق اللعبة!", Toast.LENGTH_LONG).show()
+                Toast.makeText(this, "افتح لعبة 8 Ball Pool على هاتفك وستجد الأيقونة العائمة 🎯 جاهزة فوق الطاولة!", Toast.LENGTH_LONG).show()
             }
         }
     }
@@ -119,6 +187,14 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private fun checkBatteryOptimization(): Boolean {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            val powerManager = getSystemService(Context.POWER_SERVICE) as? PowerManager
+            return powerManager?.isIgnoringBatteryOptimizations(packageName) == true
+        }
+        return true
+    }
+
     private fun requestOverlayPermission() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
             val intent = Intent(
@@ -129,38 +205,62 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun requestScreenCapture() {
-        val mediaProjectionManager = getSystemService(Context.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
-        screenCaptureLauncher.launch(mediaProjectionManager.createScreenCaptureIntent())
+    @SuppressLint("BatteryLife")
+    private fun requestIgnoreBatteryOptimizations() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            try {
+                val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
+                    data = Uri.parse("package:$packageName")
+                }
+                startActivity(intent)
+            } catch (e: Exception) {
+                try {
+                    val intent = Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)
+                    startActivity(intent)
+                } catch (ex: Exception) {
+                    Toast.makeText(this, "يرجى تعطيل توفير الطاقة للتطبيق يدوياً من إعدادات النظام", Toast.LENGTH_LONG).show()
+                }
+            }
+        }
     }
 
-    private fun updatePermissionStatus() {
-        if (AimOverlayService.isRunning) {
-            binding.tvOverlayStatus.text = "🟢 المساعد المباشر ومحرك التتبع يعملان بنجاح • المود منيو 🎯 ظاهر الآن"
-            binding.tvOverlayStatus.setTextColor(ContextCompat.getColor(this, R.color.accent_green))
-            binding.btnGrantPermission.visibility = View.GONE
-            binding.btnStartOverlay.visibility = View.GONE
-            binding.btnStopOverlay.visibility = View.VISIBLE
-            binding.btnLaunchGame.visibility = View.VISIBLE
-            return
+    private fun updateUIState() {
+        val hasOverlay = checkOverlayPermission()
+        val hasBattery = checkBatteryOptimization()
+        val isRunning = AimOverlayService.isRunning
+
+        // Overlay status
+        if (hasOverlay) {
+            binding.tvCheckOverlay.text = "✅"
+            binding.btnGrantOverlay.visibility = View.GONE
+        } else {
+            binding.tvCheckOverlay.text = "❌"
+            binding.btnGrantOverlay.visibility = View.VISIBLE
         }
 
-        binding.btnLaunchGame.visibility = View.GONE
-
-        val hasPermission = checkOverlayPermission()
-        if (hasPermission) {
-            binding.tvOverlayStatus.text = "الحالة: جاهز للتشغيل • التتبع التلقائي لعصا البلياردو والكرات"
-            binding.tvOverlayStatus.setTextColor(ContextCompat.getColor(this, R.color.accent_green))
-            binding.btnGrantPermission.visibility = View.GONE
-            binding.btnStartOverlay.visibility = View.VISIBLE
-            binding.btnStartOverlay.isEnabled = true
-            binding.btnStopOverlay.visibility = View.GONE
+        // Battery optimization status
+        if (hasBattery) {
+            binding.tvCheckBattery.text = "✅"
+            binding.btnIgnoreBattery.visibility = View.GONE
         } else {
-            binding.tvOverlayStatus.text = "الحالة: مطلوب إذن الظهور فوق التطبيقات"
-            binding.tvOverlayStatus.setTextColor(ContextCompat.getColor(this, R.color.accent_orange))
-            binding.btnGrantPermission.visibility = View.VISIBLE
+            binding.tvCheckBattery.text = "⚡"
+            binding.btnIgnoreBattery.visibility = View.VISIBLE
+        }
+
+        if (isRunning) {
+            binding.tvStatusTitle.text = "🟢 المساعد المباشر يعمل الآن • الكرة العائمة 🎯 نشطة فوق اللعبة"
+            binding.tvStatusDot.backgroundTintList = ContextCompat.getColorStateList(this, R.color.accent_green)
+            binding.btnStartOverlay.visibility = View.GONE
+            binding.btnStopOverlay.visibility = View.VISIBLE
+        } else {
+            if (hasOverlay) {
+                binding.tvStatusTitle.text = "الحالة: جاهز للتشغيل • اضغط على الزر للبدء"
+                binding.tvStatusDot.backgroundTintList = ContextCompat.getColorStateList(this, R.color.accent_green)
+            } else {
+                binding.tvStatusTitle.text = "الحالة: مطلوب منح الصلاحيات"
+                binding.tvStatusDot.backgroundTintList = ContextCompat.getColorStateList(this, R.color.accent_orange)
+            }
             binding.btnStartOverlay.visibility = View.VISIBLE
-            binding.btnStartOverlay.isEnabled = false
             binding.btnStopOverlay.visibility = View.GONE
         }
     }
@@ -170,9 +270,7 @@ class MainActivity : AppCompatActivity() {
             action = AimOverlayService.ACTION_STOP
         }
         startService(serviceIntent)
-        isServiceRunning = false
-
-        updatePermissionStatus()
+        updateUIState()
         Toast.makeText(this, "تم إيقاف المساعد بنجاح", Toast.LENGTH_SHORT).show()
     }
 }

@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:background="@color/bg_dark"
@@ -10,42 +11,81 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="vertical"
-        android:padding="20dp">
+        android:padding="16dp">
 
-        <!-- Header / Logo -->
+        <!-- ========================================== -->
+        <!-- HEADER: BRANDING & VIP STATUS              -->
+        <!-- ========================================== -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:orientation="vertical"
-            android:gravity="center"
-            android:layout_marginTop="20dp"
-            android:layout_marginBottom="24dp">
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:layout_marginTop="12dp"
+            android:layout_marginBottom="18dp">
 
+            <FrameLayout
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:background="@drawable/shape_badge_circle"
+                android:backgroundTint="@color/accent_cyan">
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_gravity="center"
+                    android:text="🎯"
+                    android:textSize="24sp" />
+            </FrameLayout>
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:orientation="vertical"
+                android:layout_marginStart="14dp">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="AIMING MASTER"
+                    android:textColor="@color/laser_cyan"
+                    android:textSize="20sp"
+                    android:textStyle="bold"
+                    android:letterSpacing="0.06" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="AI Real-Time Guideline Tool for 8 Ball Pool"
+                    android:textColor="@color/text_muted"
+                    android:textSize="12sp"
+                    android:layout_marginTop="2dp" />
+            </LinearLayout>
+
+            <!-- VIP Badge -->
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="🎱 POOL AIM MASTER"
-                android:textColor="@color/laser_green"
-                android:textSize="24sp"
+                android:text="👑 VIP PRO"
+                android:textColor="@color/bg_dark"
+                android:textSize="11sp"
                 android:textStyle="bold"
-                android:letterSpacing="0.05" />
-
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="Real-Time Trajectory &amp; Physics Live Overlay"
-                android:textColor="#94A3B8"
-                android:textSize="13sp"
-                android:layout_marginTop="4dp" />
+                android:background="@drawable/shape_vip_badge"
+                android:paddingStart="10dp"
+                android:paddingEnd="10dp"
+                android:paddingTop="5dp"
+                android:paddingBottom="5dp" />
         </LinearLayout>
 
-        <!-- Status Card -->
+        <!-- ========================================== -->
+        <!-- SERVICE STATUS & SETUP WIZARD CARD         -->
+        <!-- ========================================== -->
         <com.google.android.material.card.MaterialCardView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             app:cardCornerRadius="16dp"
             app:cardBackgroundColor="@color/bg_card"
-            app:strokeColor="#334155"
+            app:strokeColor="@color/border_card"
             app:strokeWidth="1dp"
             android:layout_marginBottom="16dp">
 
@@ -55,55 +95,165 @@
                 android:orientation="vertical"
                 android:padding="16dp">
 
-                <TextView
-                    android:id="@+id/tvOverlayStatus"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="الحالة: بانتظار منح إذن الظهور فوق التطبيقات"
-                    android:textColor="@color/accent_orange"
-                    android:textSize="14sp"
-                    android:textStyle="bold" />
-
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="يحتاج المساعد إلى صلاحية العرض فوق الشاشة وبث الشاشة لتتبع حركة العصا وشريط القوة تلقائياً في اللعبة."
-                    android:textColor="#94A3B8"
-                    android:textSize="12sp"
-                    android:layout_marginTop="6dp" />
-
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/btnGrantPermission"
+                <LinearLayout
                     android:layout_width="match_parent"
-                    android:layout_height="48dp"
-                    android:text="منح إذن الظهور فوق الشاشة"
-                    android:textColor="@color/white"
-                    app:backgroundTint="@color/accent_cyan"
-                    app:cornerRadius="12dp"
-                    android:layout_marginTop="12dp" />
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical"
+                    android:layout_marginBottom="12dp">
+
+                    <TextView
+                        android:id="@+id/tvStatusDot"
+                        android:layout_width="10dp"
+                        android:layout_height="10dp"
+                        android:background="@drawable/shape_dot_indicator"
+                        android:backgroundTint="@color/accent_orange" />
+
+                    <TextView
+                        android:id="@+id/tvStatusTitle"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="الحالة: بانتظار تفعيل الصلاحيات"
+                        android:textColor="@color/white"
+                        android:textSize="14sp"
+                        android:textStyle="bold"
+                        android:layout_marginStart="8dp" />
+                </LinearLayout>
+
+                <!-- Permission 1: Overlay -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical"
+                    android:paddingTop="6dp"
+                    android:paddingBottom="6dp">
+
+                    <TextView
+                        android:id="@+id/tvCheckOverlay"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="❌"
+                        android:textSize="14sp" />
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:orientation="vertical"
+                        android:layout_marginStart="10dp">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="الظهور فوق التطبيقات (Overlay)"
+                            android:textColor="@color/white"
+                            android:textSize="13sp"
+                            android:textStyle="bold" />
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="لعرض خطوط التوجيه والكرة العائمة فوق اللعبة"
+                            android:textColor="@color/text_muted"
+                            android:textSize="11sp" />
+                    </LinearLayout>
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btnGrantOverlay"
+                        style="@style/Widget.MaterialComponents.Button.TextButton"
+                        android:layout_width="wrap_content"
+                        android:layout_height="36dp"
+                        android:text="تفعيل"
+                        android:textColor="@color/accent_cyan"
+                        android:textSize="12sp"
+                        android:textStyle="bold" />
+                </LinearLayout>
+
+                <!-- Divider -->
+                <View
+                    android:layout_width="match_parent"
+                    android:layout_height="1dp"
+                    android:background="@color/border_card"
+                    android:layout_marginTop="4dp"
+                    android:layout_marginBottom="4dp" />
+
+                <!-- Permission 2: Battery Optimization (Anti-Freeze) -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical"
+                    android:paddingTop="6dp"
+                    android:paddingBottom="6dp">
+
+                    <TextView
+                        android:id="@+id/tvCheckBattery"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="⚡"
+                        android:textSize="14sp" />
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:orientation="vertical"
+                        android:layout_marginStart="10dp">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="إلغاء قيود البطارية (Anti-Freeze)"
+                            android:textColor="@color/white"
+                            android:textSize="13sp"
+                            android:textStyle="bold" />
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="يمنع إغلاق وتجميد المساعد عند بدء المباراة"
+                            android:textColor="@color/text_muted"
+                            android:textSize="11sp" />
+                    </LinearLayout>
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btnIgnoreBattery"
+                        style="@style/Widget.MaterialComponents.Button.TextButton"
+                        android:layout_width="wrap_content"
+                        android:layout_height="36dp"
+                        android:text="حماية"
+                        android:textColor="@color/accent_gold"
+                        android:textSize="12sp"
+                        android:textStyle="bold" />
+                </LinearLayout>
             </LinearLayout>
         </com.google.android.material.card.MaterialCardView>
 
-        <!-- Main Action Buttons -->
+        <!-- ========================================== -->
+        <!-- MAIN LAUNCHER ACTION BUTTONS               -->
+        <!-- ========================================== -->
         <com.google.android.material.button.MaterialButton
             android:id="@+id/btnStartOverlay"
             android:layout_width="match_parent"
             android:layout_height="56dp"
-            android:text="تشغيل المساعد المباشر (Start Live Assist)"
-            android:textColor="@color/white"
+            android:text="▶ تشغيل AIMING MASTER"
+            android:textColor="@color/bg_dark"
             android:textSize="15sp"
             android:textStyle="bold"
-            app:backgroundTint="@color/accent_green"
+            app:backgroundTint="@color/accent_cyan"
             app:cornerRadius="16dp"
-            android:layout_marginBottom="12dp" />
+            app:elevation="4dp"
+            android:layout_marginBottom="10dp" />
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/btnStopOverlay"
             android:layout_width="match_parent"
-            android:layout_height="50dp"
-            android:text="إيقاف المساعد (Stop Assist)"
+            android:layout_height="52dp"
+            android:text="⏹ إيقاف المساعد (STOP)"
             android:textColor="@color/white"
             android:textSize="14sp"
+            android:textStyle="bold"
             app:backgroundTint="@color/accent_red"
             app:cornerRadius="14dp"
             android:visibility="gone"
@@ -112,23 +262,283 @@
         <com.google.android.material.button.MaterialButton
             android:id="@+id/btnLaunchGame"
             android:layout_width="match_parent"
-            android:layout_height="50dp"
-            android:text="🎱 فتح لعبة 8 Ball Pool الآن"
+            android:layout_height="48dp"
+            android:text="🎱 فتح لعبة 8 Ball Pool"
             android:textColor="@color/white"
             android:textSize="14sp"
             android:textStyle="bold"
-            app:backgroundTint="@color/accent_cyan"
+            app:backgroundTint="@color/bg_card_secondary"
+            app:strokeColor="@color/border_card"
+            app:strokeWidth="1dp"
             app:cornerRadius="14dp"
-            android:visibility="gone"
-            android:layout_marginBottom="16dp" />
+            android:layout_marginBottom="20dp" />
 
-        <!-- Settings Card -->
+        <!-- ========================================== -->
+        <!-- AIMING MASTER CORE FEATURES & SETTINGS     -->
+        <!-- ========================================== -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="⚙️ خصائص ومميزات Aiming Master"
+            android:textColor="@color/white"
+            android:textSize="15sp"
+            android:textStyle="bold"
+            android:layout_marginBottom="10dp" />
+
         <com.google.android.material.card.MaterialCardView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             app:cardCornerRadius="16dp"
             app:cardBackgroundColor="@color/bg_card"
-            app:strokeColor="#334155"
+            app:strokeColor="@color/border_card"
+            app:strokeWidth="1dp"
+            android:layout_marginBottom="20dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="16dp">
+
+                <!-- 3-Lines Guideline Mode -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical"
+                    android:paddingTop="6dp"
+                    android:paddingBottom="6dp">
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:orientation="vertical">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="3-Lines Guideline (Super Line)"
+                            android:textColor="@color/white"
+                            android:textSize="14sp"
+                            android:textStyle="bold" />
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="رسم 3 خطوط متزامنة: مسار العصا، مسار الهدف، وانحراف البيضاء"
+                            android:textColor="@color/text_muted"
+                            android:textSize="11sp" />
+                    </LinearLayout>
+
+                    <androidx.appcompat.widget.SwitchCompat
+                        android:id="@+id/switchThreeLines"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:checked="true" />
+                </LinearLayout>
+
+                <View
+                    android:layout_width="match_parent"
+                    android:layout_height="1dp"
+                    android:background="@color/border_card"
+                    android:layout_marginTop="6dp"
+                    android:layout_marginBottom="6dp" />
+
+                <!-- Cushion Bank Shots -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical"
+                    android:paddingTop="6dp"
+                    android:paddingBottom="6dp">
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:orientation="vertical">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="Cushion Bank Shots (ارتداد الجدران)"
+                            android:textColor="@color/white"
+                            android:textSize="14sp"
+                            android:textStyle="bold" />
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="حساب زوايا الارتداد الفيزيائية عند ضرب الوسائد"
+                            android:textColor="@color/text_muted"
+                            android:textSize="11sp" />
+                    </LinearLayout>
+
+                    <androidx.appcompat.widget.SwitchCompat
+                        android:id="@+id/switchCushionShots"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:checked="true" />
+                </LinearLayout>
+
+                <View
+                    android:layout_width="match_parent"
+                    android:layout_height="1dp"
+                    android:background="@color/border_card"
+                    android:layout_marginTop="6dp"
+                    android:layout_marginBottom="6dp" />
+
+                <!-- Ghost Ball -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical"
+                    android:paddingTop="6dp"
+                    android:paddingBottom="6dp">
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:orientation="vertical">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="Ghost Ball (كرة الشبح التقديرية)"
+                            android:textColor="@color/white"
+                            android:textSize="14sp"
+                            android:textStyle="bold" />
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="إظهار دائرة التلامس الدقيقة $2R$ عند الاصطدام بالكرة الهدف"
+                            android:textColor="@color/text_muted"
+                            android:textSize="11sp" />
+                    </LinearLayout>
+
+                    <androidx.appcompat.widget.SwitchCompat
+                        android:id="@+id/switchGhostBall"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:checked="true" />
+                </LinearLayout>
+
+                <View
+                    android:layout_width="match_parent"
+                    android:layout_height="1dp"
+                    android:background="@color/border_card"
+                    android:layout_marginTop="6dp"
+                    android:layout_marginBottom="6dp" />
+
+                <!-- Pocket Lock Glow -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical"
+                    android:paddingTop="6dp"
+                    android:paddingBottom="6dp">
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:orientation="vertical">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="Auto Pocket Lock (قفل الثقب)"
+                            android:textColor="@color/white"
+                            android:textSize="14sp"
+                            android:textStyle="bold" />
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="توهج أخضر ورادار يؤكد دخول الكرة داخل الجيب 100%"
+                            android:textColor="@color/text_muted"
+                            android:textSize="11sp" />
+                    </LinearLayout>
+
+                    <androidx.appcompat.widget.SwitchCompat
+                        android:id="@+id/switchPocketLock"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:checked="true" />
+                </LinearLayout>
+
+                <View
+                    android:layout_width="match_parent"
+                    android:layout_height="1dp"
+                    android:background="@color/border_card"
+                    android:layout_marginTop="6dp"
+                    android:layout_marginBottom="6dp" />
+
+                <!-- Auto-Hide in Lobby -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical"
+                    android:paddingTop="6dp"
+                    android:paddingBottom="6dp">
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:orientation="vertical">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="Auto-Hide in Lobby (إخفاء تلقائي خارج المباراة)"
+                            android:textColor="@color/white"
+                            android:textSize="14sp"
+                            android:textStyle="bold" />
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="إخفاء الخطوط في القوائم وإظهارها فقط داخل طاولة المباراة"
+                            android:textColor="@color/text_muted"
+                            android:textSize="11sp" />
+                    </LinearLayout>
+
+                    <androidx.appcompat.widget.SwitchCompat
+                        android:id="@+id/switchAutoMatch"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:checked="true" />
+                </LinearLayout>
+
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
+
+        <!-- ========================================== -->
+        <!-- COLOR & APPEARANCE PRESETS                 -->
+        <!-- ========================================== -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="🎨 ألوان وسمك خط الليزر"
+            android:textColor="@color/white"
+            android:textSize="15sp"
+            android:textStyle="bold"
+            android:layout_marginBottom="10dp" />
+
+        <com.google.android.material.card.MaterialCardView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            app:cardCornerRadius="16dp"
+            app:cardBackgroundColor="@color/bg_card"
+            app:strokeColor="@color/border_card"
             app:strokeWidth="1dp"
             android:layout_marginBottom="24dp">
 
@@ -138,48 +548,108 @@
                 android:orientation="vertical"
                 android:padding="16dp">
 
+                <!-- Color Choices -->
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="⚡ إعدادات الفيزياء ومسارات الارتداد"
-                    android:textColor="@color/white"
-                    android:textSize="15sp"
-                    android:textStyle="bold"
-                    android:layout_marginBottom="12dp" />
+                    android:text="اختر لون الليزر المفضل لديك:"
+                    android:textColor="@color/text_muted"
+                    android:textSize="12sp"
+                    android:layout_marginBottom="10dp" />
 
-                <TextView
-                    android:layout_width="wrap_content"
+                <LinearLayout
+                    android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:text="• حساب مسار الكرة البيضاء بزاوية الانحراف 90° (Tangent Vector)"
-                    android:textColor="#CBD5E1"
-                    android:textSize="13sp"
-                    android:layout_marginBottom="6dp" />
+                    android:orientation="horizontal"
+                    android:gravity="center"
+                    android:layout_marginBottom="16dp">
 
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="• ارتداد الجدران الذكي (Cushion Bank Shots) حتى ارتدادين"
-                    android:textColor="#CBD5E1"
-                    android:textSize="13sp"
-                    android:layout_marginBottom="6dp" />
+                    <View
+                        android:id="@+id/colorCyan"
+                        android:layout_width="38dp"
+                        android:layout_height="38dp"
+                        android:layout_margin="6dp"
+                        android:background="@drawable/shape_color_dot"
+                        android:backgroundTint="@color/laser_cyan" />
 
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="• محاكاة قوة الضربة ونقطة التوقف التام بفعل الاحتكاك (Friction Stop)"
-                    android:textColor="#CBD5E1"
-                    android:textSize="13sp"
-                    android:layout_marginBottom="6dp" />
+                    <View
+                        android:id="@+id/colorGold"
+                        android:layout_width="38dp"
+                        android:layout_height="38dp"
+                        android:layout_margin="6dp"
+                        android:background="@drawable/shape_color_dot"
+                        android:backgroundTint="@color/laser_yellow" />
 
-                <TextView
-                    android:layout_width="wrap_content"
+                    <View
+                        android:id="@+id/colorGreen"
+                        android:layout_width="38dp"
+                        android:layout_height="38dp"
+                        android:layout_margin="6dp"
+                        android:background="@drawable/shape_color_dot"
+                        android:backgroundTint="@color/laser_green" />
+
+                    <View
+                        android:id="@+id/colorPurple"
+                        android:layout_width="38dp"
+                        android:layout_height="38dp"
+                        android:layout_margin="6dp"
+                        android:background="@drawable/shape_color_dot"
+                        android:backgroundTint="@color/laser_purple" />
+
+                    <View
+                        android:id="@+id/colorWhite"
+                        android:layout_width="38dp"
+                        android:layout_height="38dp"
+                        android:layout_margin="6dp"
+                        android:background="@drawable/shape_color_dot"
+                        android:backgroundTint="@color/laser_white" />
+                </LinearLayout>
+
+                <!-- Thickness Slider -->
+                <LinearLayout
+                    android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:text="• مؤشر التوهج الأخضر عند اصطفاف الكرة بدقة نحو الجيب"
-                    android:textColor="#CBD5E1"
-                    android:textSize="13sp" />
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="سمك الخط:"
+                        android:textColor="@color/white"
+                        android:textSize="13sp" />
+
+                    <SeekBar
+                        android:id="@+id/sbThickness"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:max="8"
+                        android:progress="4" />
+
+                    <TextView
+                        android:id="@+id/tvThicknessVal"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="3.5px"
+                        android:textColor="@color/accent_cyan"
+                        android:textSize="13sp"
+                        android:textStyle="bold" />
+                </LinearLayout>
 
             </LinearLayout>
         </com.google.android.material.card.MaterialCardView>
+
+        <!-- Tip card -->
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="💡 تلميح: عند تشغيل المساعد ستظهر أيقونة عائمة 🎯 فوق اللعبة مباشرة، يمكنك النقر عليها في أي لحظة للتحكم في الإعدادات أو المقاسات دون مغادرة اللعبة!"
+            android:textColor="@color/text_muted"
+            android:textSize="12sp"
+            android:lineSpacingExtra="3dp"
+            android:padding="8dp"
+            android:layout_marginBottom="16dp" />
 
     </LinearLayout>
 </ScrollView>

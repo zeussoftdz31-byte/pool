@@ -25,6 +25,7 @@ import androidx.appcompat.view.ContextThemeWrapper
 import androidx.appcompat.widget.SwitchCompat
 import androidx.core.app.NotificationCompat
 import com.poolaim.assist.R
+import com.poolaim.assist.AppSettings
 import com.poolaim.assist.physics.Vector2D
 import com.poolaim.assist.vision.ScreenAimTracker
 import kotlin.math.*
@@ -140,8 +141,8 @@ class AimOverlayService : Service(), SensorEventListener {
         )
 
         return NotificationCompat.Builder(this, CHANNEL_ID)
-            .setContentTitle("Aim Master Mod v2.5")
-            .setContentText("المود منيو ومحرك التتبع التلقائي يعملان الآن")
+            .setContentTitle("Aiming Master Pro")
+            .setContentText("المساعد المباشر ومحرك التتبع التلقائي يعملان الآن 🎯")
             .setSmallIcon(android.R.drawable.sym_def_app_icon)
             .addAction(android.R.drawable.ic_menu_close_clear_cancel, "إيقاف", stopPendingIntent)
             .setOngoing(true)
@@ -153,6 +154,10 @@ class AimOverlayService : Service(), SensorEventListener {
         try {
             val themeWrapper = ContextThemeWrapper(this, R.style.Theme_PoolAimAssist)
             canvasView = AimCanvasView(themeWrapper)
+            
+            // Sync with persistent AppSettings
+            val settings = AppSettings.get(this)
+            canvasView?.applySettings(settings)
 
             val layoutType = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY

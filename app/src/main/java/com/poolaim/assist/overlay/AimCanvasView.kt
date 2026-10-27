@@ -5,6 +5,7 @@ import android.graphics.*
 import android.view.View
 import androidx.core.content.ContextCompat
 import com.poolaim.assist.R
+import com.poolaim.assist.AppSettings
 import com.poolaim.assist.physics.BallTrajectory
 import com.poolaim.assist.physics.LineIntersection
 import com.poolaim.assist.physics.Vector2D
@@ -246,6 +247,31 @@ class AimCanvasView(context: Context) : View(context) {
         } catch (e: Exception) {
             e.printStackTrace()
         }
+    }
+
+    fun applySettings(settings: AppSettings) {
+        isMasterOverlayEnabled = settings.isGuidelinesEnabled
+        enableBankShots = settings.isCushionShotsEnabled
+        enableCueBallPath = settings.isThreeLinesEnabled
+        enablePocketGlow = settings.isPocketLockEnabled
+        pocketScale = settings.pocketScale
+        if (settings.tableOffsetX != 0f || settings.tableOffsetY != 0f) {
+            offsetX = settings.tableOffsetX
+            offsetY = settings.tableOffsetY
+        }
+
+        val chosenColor = settings.lineColor
+        directAimPaint.color = chosenColor
+        directAimPaint.strokeWidth = settings.lineThickness + 1.5f
+        targetTrajectoryPaint.strokeWidth = settings.lineThickness + 1.0f
+        firstBankPaint.strokeWidth = settings.lineThickness
+        secondBankPaint.strokeWidth = settings.lineThickness - 0.5f
+        ghostBallPaint.color = chosenColor
+
+        if (viewWidth > 0 && viewHeight > 0) {
+            recalculateTableBounds(viewWidth, viewHeight)
+        }
+        postInvalidate()
     }
 
     fun adjustCalibration(
