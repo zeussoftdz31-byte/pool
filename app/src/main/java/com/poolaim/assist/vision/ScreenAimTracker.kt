@@ -8,6 +8,7 @@ import android.hardware.display.VirtualDisplay
 import android.media.Image
 import android.media.ImageReader
 import android.media.projection.MediaProjection
+import android.graphics.RectF
 import android.os.Handler
 import android.os.HandlerThread
 import android.view.WindowManager
@@ -24,14 +25,11 @@ data class CircleBall(val x: Float, val y: Float, val radius: Float)
  * ANY cue stick (Fire / Archangel / Legendary / Default), and ANY screen DPI/Resolution.
  *
  * Core Breakthroughs:
- * 1. Clustering Table Felt Detector: Learns the exact dominant felt color of the table automatically,
- *    without hardcoded color boundaries. Works on Cyan / Turquoise tables instantly!
- * 2. High-Contrast Luminance Cue Ball Locator: Finds the white cue ball by relative luminance contrast
- *    against the detected felt, accommodating ambient color reflections.
- * 3. Native In-Game Guideline + Cue Stick Dual Angular Tracker:
- *    Detects the game's own solid white aiming line combined with cue stick position for 0.1° accuracy.
- * 4. Dynamic Display Metrics: Auto-syncs physical screen dimensions in landscape mode.
- * 5. Persistent State Retention: Never resets to fallback coordinates during an active match.
+ * 1. Clustering Table Felt Detector: Learns the exact dominant felt color of the table automatically.
+ * 2. High-Contrast Luminance Cue Ball Locator: Finds the white cue ball by relative luminance contrast.
+ * 3. Native In-Game Guideline + Cue Stick Dual Angular Tracker: 0.1° accuracy.
+ * 4. Dynamic Display Metrics & Zero-DPI Table Boundary Sensor: Detects real cushion borders.
+ * 5. Full Auto-Rotation Engine: Seamlessly adapts across 90°, 270°, and landscape flips.
  */
 class ScreenAimTracker(
     private val context: Context,
@@ -45,7 +43,8 @@ class ScreenAimTracker(
             aimAngleRad: Float,
             powerPercent: Float,
             targetBallPos: Vector2D?,
-            matchDetected: Boolean
+            matchDetected: Boolean,
+            tableBounds: RectF? = null
         )
         fun onMatchStateChanged(isMatch: Boolean)
     }
@@ -79,17 +78,34 @@ class ScreenAimTracker(
 
     var isAutoTrackingEnabled = true
 
-    fun updateScreenMetrics() {
+    fun updateScreenMetrics(customW: Int = -1, customH: Int = -1) {
         try {
-            val windowManager = context.getSystemService(Context.WINDOW_SERVICE) as WindowManager
-            val display = windowManager.defaultDisplay
-            val size = Point()
-            display.getRealSize(size)
-            screenWidth = maxOf(320, maxOf(size.x, size.y))
-            screenHeight = maxOf(240, minOf(size.x, size.y))
+            if (customW > 0 && customH > 0) {
+                screenWidth = maxOf(320, maxOf(customW, customH))
+                screenHeight = maxOf(240, minOf(customW, customH))
+            } else {
+                val windowManager = context.getSystemService(Context.WINDOW_SERVICE) as WindowManager
+                val display = windowManager.defaultDisplay
+                val size = Point()
+                display.getRealSize(size)
+                screenWidth = maxOf(320, maxOf(size.x, size.y))
+                screenHeight = maxOf(240, minOf(size.x, size.y))
+            }
         } catch (e: Exception) {
             e.printStackTrace()
         }
+    }
+
+    fun onOrientationChanged(newW: Int, newH: Int, rotation: Int) {
+        updateScreenMetrics(newW, newH)
+        val aspect = screenWidth.toFloat() / screenHeight.toFloat()
+        val newCaptureWidth = maxOf(16, ((captureHeight * aspect) / 16).toInt() * 16)
+        if (newCaptureWidth != captureWidth) {
+            captureWidth = newCaptureWidth
+            start()
+        }
+        isLockedOnCue = false
+        lockFrames = 0
     }
 
     fun start() {
@@ -173,10 +189,10 @@ class ScreenAimTracker(
         val width = image.width
         val height = image.height
 
-        val tableStartX = (width * 0.12f).toInt()
-        val tableEndX = (width * 0.88f).toInt()
-        val tableStartY = (height * 0.14f).toInt()
-        val tableEndY = (height * 0.86f).toInt()
+        var tableStartX = (width * 0.12f).toInt()
+        var tableEndX = (width * 0.88f).toInt()
+        var tableStartY = (height * 0.14f).toInt()
+        var tableEndY = (height * 0.86f).toInt()
 
         val ballRadiusEst = height * 0.022f
 
@@ -289,6 +305,81 @@ class ScreenAimTracker(
             isLockedOnCue = false
             lockFrames = 0
             return
+        }
+
+        // Dynamically detect real table felt cushion boundaries (Zero-DPI calibration)
+        val scanMidY = height / 2
+        var detectedStartX = tableStartX
+        var detectedEndX = tableEndX
+        var detectedStartY = tableStartY
+        var detectedEndY = tableEndY
+
+        // Left cushion scan (horizontal centerline)
+        for (x in (width * 0.30f).toInt() downTo (width * 0.04f).toInt() step 2) {
+            val c = getPixelPacked(buffer, x, scanMidY, rowStride, pixelStride, width, height)
+            val r = (c shr 16) and 0xFF
+            val gCol = (c shr 8) and 0xFF
+            val b = c and 0xFF
+            if (!isFelt(r, gCol, b)) {
+                detectedStartX = x + 3
+                break
+            }
+        }
+        // Right cushion scan
+        for (x in (width * 0.70f).toInt() until (width * 0.96f).toInt() step 2) {
+            val c = getPixelPacked(buffer, x, scanMidY, rowStride, pixelStride, width, height)
+            val r = (c shr 16) and 0xFF
+            val gCol = (c shr 8) and 0xFF
+            val b = c and 0xFF
+            if (!isFelt(r, gCol, b)) {
+                detectedEndX = x - 3
+                break
+            }
+        }
+
+        // Top and Bottom cushion scan (scan away from center pockets at 32% and 68% table width)
+        val scanRailX1 = (width * 0.32f).toInt()
+        val scanRailX2 = (width * 0.68f).toInt()
+        var topY1 = -1
+        var topY2 = -1
+        for (y in (height * 0.35f).toInt() downTo (height * 0.06f).toInt() step 2) {
+            val c1 = getPixelPacked(buffer, scanRailX1, y, rowStride, pixelStride, width, height)
+            if (topY1 < 0 && !isFelt((c1 shr 16) and 0xFF, (c1 shr 8) and 0xFF, c1 and 0xFF)) {
+                topY1 = y + 3
+            }
+            val c2 = getPixelPacked(buffer, scanRailX2, y, rowStride, pixelStride, width, height)
+            if (topY2 < 0 && !isFelt((c2 shr 16) and 0xFF, (c2 shr 8) and 0xFF, c2 and 0xFF)) {
+                topY2 = y + 3
+            }
+            if (topY1 >= 0 && topY2 >= 0) break
+        }
+        if (topY1 >= 0 || topY2 >= 0) {
+            detectedStartY = if (topY1 >= 0 && topY2 >= 0) minOf(topY1, topY2) else maxOf(topY1, topY2)
+        }
+
+        var botY1 = -1
+        var botY2 = -1
+        for (y in (height * 0.65f).toInt() until (height * 0.94f).toInt() step 2) {
+            val c1 = getPixelPacked(buffer, scanRailX1, y, rowStride, pixelStride, width, height)
+            if (botY1 < 0 && !isFelt((c1 shr 16) and 0xFF, (c1 shr 8) and 0xFF, c1 and 0xFF)) {
+                botY1 = y - 3
+            }
+            val c2 = getPixelPacked(buffer, scanRailX2, y, rowStride, pixelStride, width, height)
+            if (botY2 < 0 && !isFelt((c2 shr 16) and 0xFF, (c2 shr 8) and 0xFF, c2 and 0xFF)) {
+                botY2 = y - 3
+            }
+            if (botY1 >= 0 && botY2 >= 0) break
+        }
+        if (botY1 >= 0 || botY2 >= 0) {
+            detectedEndY = if (botY1 >= 0 && botY2 >= 0) maxOf(botY1, botY2) else minOf(botY1, botY2)
+        }
+
+        // Validate sanity
+        if (detectedEndX - detectedStartX > width * 0.45f && detectedEndY - detectedStartY > height * 0.35f) {
+            tableStartX = detectedStartX
+            tableEndX = detectedEndX
+            tableStartY = detectedStartY
+            tableEndY = detectedEndY
         }
 
         // =========================================================================
@@ -654,12 +745,20 @@ class ScreenAimTracker(
             null
         }
 
+        val detectedBounds = RectF(
+            tableStartX * scaleX,
+            tableStartY * scaleY,
+            tableEndX * scaleX,
+            tableEndY * scaleY
+        )
+
         listener.onAimUpdated(
             cueBallPos = Vector2D(realCueX, realCueY),
             aimAngleRad = smoothAngle,
             powerPercent = smoothPower,
             targetBallPos = realTargetPos,
-            matchDetected = true
+            matchDetected = true,
+            tableBounds = detectedBounds
         )
     }
 

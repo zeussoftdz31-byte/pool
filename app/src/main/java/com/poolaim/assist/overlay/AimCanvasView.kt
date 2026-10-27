@@ -426,9 +426,23 @@ class AimCanvasView(context: Context) : View(context) {
         angleRad: Float,
         power: Float,
         target: Vector2D?,
-        matchActive: Boolean = true
+        matchActive: Boolean = true,
+        detectedBounds: RectF? = null
     ) {
         isMatchDetected = matchActive
+        if (!isMasterOverlayEnabled) return
+
+        if (detectedBounds != null && detectedBounds.width() > 100f && detectedBounds.height() > 80f) {
+            tableBounds.set(
+                detectedBounds.left + offsetX,
+                detectedBounds.top + offsetY,
+                detectedBounds.right + offsetX,
+                detectedBounds.bottom + offsetY
+            )
+            ballRadius = tableBounds.height() / 33.0f
+            updatePockets()
+        }
+
         isAutoAimActive = true
         cueBallPos = cue
         aimAngleRad = angleRad

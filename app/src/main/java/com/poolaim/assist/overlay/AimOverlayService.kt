@@ -8,6 +8,7 @@ import android.content.pm.ServiceInfo
 import android.graphics.Color
 import android.graphics.PixelFormat
 import android.graphics.Point
+import android.graphics.RectF
 import android.hardware.Sensor
 import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
@@ -17,6 +18,7 @@ import android.media.projection.MediaProjection
 import android.media.projection.MediaProjectionManager
 import android.os.*
 import android.view.*
+import android.view.OrientationEventListener
 import android.widget.SeekBar
 import android.widget.TextView
 import android.widget.Toast
@@ -49,9 +51,11 @@ class AimOverlayService : Service(), SensorEventListener {
     private var mediaProjection: MediaProjection? = null
     private var aimTracker: ScreenAimTracker? = null
 
-    // Display rotation listener
+    // Display rotation & orientation listeners
     private var displayManager: DisplayManager? = null
     private var displayListener: DisplayManager.DisplayListener? = null
+    private var orientationListener: OrientationEventListener? = null
+    private var lastRotation = -1
 
     // Shake sensor
     private var sensorManager: SensorManager? = null
@@ -177,6 +181,9 @@ class AimOverlayService : Service(), SensorEventListener {
                 PixelFormat.TRANSLUCENT
             ).apply {
                 gravity = Gravity.TOP or Gravity.START
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                    layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
+                }
             }
 
             windowManager.addView(canvasView, params)
@@ -221,6 +228,9 @@ class AimOverlayService : Service(), SensorEventListener {
                 gravity = Gravity.TOP or Gravity.START
                 x = (24 * density).toInt()
                 y = (32 * density).toInt()
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                    layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
+                }
             }
             modMenuParams = params
 
@@ -499,20 +509,85 @@ class AimOverlayService : Service(), SensorEventListener {
                 override fun onDisplayAdded(displayId: Int) {}
                 override fun onDisplayRemoved(displayId: Int) {}
                 override fun onDisplayChanged(displayId: Int) {
-                    updateDisplayOrientation()
+                    handleRotationChange()
                 }
             }
             displayManager?.registerDisplayListener(displayListener, Handler(Looper.getMainLooper()))
+
+            orientationListener = object : OrientationEventListener(this, SensorManager.SENSOR_DELAY_NORMAL) {
+                override fun onOrientationChanged(orientation: Int) {
+                    if (orientation == ORIENTATION_UNKNOWN) return
+                    val currentRotation = try {
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                            display?.rotation ?: windowManager.defaultDisplay.rotation
+                        } else {
+                            @Suppress("DEPRECATION")
+                            windowManager.defaultDisplay.rotation
+                        }
+                    } catch (e: Exception) {
+                        @Suppress("DEPRECATION")
+                        windowManager.defaultDisplay.rotation
+                    }
+
+                    if (currentRotation != lastRotation) {
+                        lastRotation = currentRotation
+                        handleRotationChange(currentRotation)
+                    }
+                }
+            }
+            if (orientationListener?.canDetectOrientation() == true) {
+                orientationListener?.enable()
+            }
         } catch (e: Exception) {
             e.printStackTrace()
         }
     }
 
-    private fun updateDisplayOrientation() {
+    private fun handleRotationChange(rotation: Int = -1) {
         try {
+            val rot = if (rotation >= 0) rotation else {
+                try {
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                        display?.rotation ?: windowManager.defaultDisplay.rotation
+                    } else {
+                        @Suppress("DEPRECATION")
+                        windowManager.defaultDisplay.rotation
+                    }
+                } catch (e: Exception) {
+                    @Suppress("DEPRECATION")
+                    windowManager.defaultDisplay.rotation
+                }
+            }
+
             val size = Point()
+            @Suppress("DEPRECATION")
             windowManager.defaultDisplay.getRealSize(size)
-            canvasView?.recalculateTableBounds(size.x, size.y)
+
+            val isLandscape = size.x > size.y
+
+            if (isLandscape) {
+                // Game mode: ensure canvas overlay is active and calibrated
+                canvasView?.visibility = if (canvasView?.isMasterOverlayEnabled == true) View.VISIBLE else View.GONE
+                canvasView?.recalculateTableBounds(size.x, size.y)
+                aimTracker?.onOrientationChanged(size.x, size.y, rot)
+            } else {
+                // Portrait mode: hide overlay cleanly to prevent UI clutter
+                canvasView?.visibility = View.GONE
+                aimTracker?.onOrientationChanged(size.x, size.y, rot)
+            }
+
+            // Reposition mod menu safely within current viewport bounds
+            modMenuParams?.let { p ->
+                val maxX = maxOf(0, size.x - p.width)
+                val maxY = maxOf(0, size.y - p.height)
+                p.x = p.x.coerceIn(0, maxX)
+                p.y = p.y.coerceIn(0, maxY)
+                modMenuView?.let { mv ->
+                    if (mv.isAttachedToWindow) {
+                        windowManager.updateViewLayout(mv, p)
+                    }
+                }
+            }
         } catch (e: Exception) {
             e.printStackTrace()
         }
@@ -637,9 +712,10 @@ class AimOverlayService : Service(), SensorEventListener {
                             aimAngleRad: Float,
                             powerPercent: Float,
                             targetBallPos: Vector2D?,
-                            matchDetected: Boolean
+                            matchDetected: Boolean,
+                            tableBounds: RectF?
                         ) {
-                            canvasView?.updateAutoAim(cueBallPos, aimAngleRad, powerPercent, targetBallPos, matchDetected)
+                            canvasView?.updateAutoAim(cueBallPos, aimAngleRad, powerPercent, targetBallPos, matchDetected, tableBounds)
                         }
 
                         override fun onMatchStateChanged(isMatch: Boolean) {
@@ -660,7 +736,11 @@ class AimOverlayService : Service(), SensorEventListener {
         super.onDestroy()
         isRunning = false
         try {
+            orientationListener?.disable()
+            orientationListener = null
+
             displayListener?.let { displayManager?.unregisterDisplayListener(it) }
+            displayListener = null
 
             aimTracker?.stop()
             aimTracker = null
