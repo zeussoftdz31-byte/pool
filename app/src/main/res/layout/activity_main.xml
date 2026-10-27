@@ -107,6 +107,19 @@
             app:backgroundTint="@color/accent_red"
             app:cornerRadius="14dp"
             android:visibility="gone"
+            android:layout_marginBottom="10dp" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnLaunchGame"
+            android:layout_width="match_parent"
+            android:layout_height="50dp"
+            android:text="🎱 فتح لعبة 8 Ball Pool الآن"
+            android:textColor="@color/white"
+            android:textSize="14sp"
+            android:textStyle="bold"
+            app:backgroundTint="@color/accent_cyan"
+            app:cornerRadius="14dp"
+            android:visibility="gone"
             android:layout_marginBottom="16dp" />
 
         <!-- Settings Card -->

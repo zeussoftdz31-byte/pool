@@ -337,14 +337,24 @@ class AimCanvasView(context: Context) : View(context) {
     }
 
     fun recalculateTableBounds(w: Int, h: Int) {
+        if (w <= 0 || h <= 0) return
         val isLandscape = w > h
-        val screenW = if (isLandscape) w.toFloat() else h.toFloat()
-        val screenH = if (isLandscape) h.toFloat() else w.toFloat()
 
-        // 8 Ball Pool table playfield: base height occupies ~75% of landscape screen height
-        // tableZoom allows scaling down to 35% or up to 170%
-        val tableH = screenH * 0.75f * tableScaleY * tableZoom
-        val tableW = tableH * 2.0f * tableScaleX
+        val screenW = w.toFloat()
+        val screenH = h.toFloat()
+
+        // In landscape (8 Ball Pool game mode): table height occupies ~75% of screen height (2:1 aspect ratio)
+        // In portrait (testing/launcher mode): table width occupies ~92% of screen width (2:1 aspect ratio)
+        val (baseTableW, baseTableH) = if (isLandscape) {
+            val th = screenH * 0.75f
+            Pair(th * 2.0f, th)
+        } else {
+            val tw = screenW * 0.92f
+            Pair(tw, tw * 0.50f)
+        }
+
+        val tableW = baseTableW * tableScaleX * tableZoom
+        val tableH = baseTableH * tableScaleY * tableZoom
 
         // Horizontally and vertically centered across the physical display with offset calibration
         val tableLeft = (screenW - tableW) / 2f + offsetX

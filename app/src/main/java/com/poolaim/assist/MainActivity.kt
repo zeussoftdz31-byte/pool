@@ -48,11 +48,14 @@ class MainActivity : AppCompatActivity() {
 
             binding.btnStartOverlay.visibility = View.GONE
             binding.btnStopOverlay.visibility = View.VISIBLE
-            Toast.makeText(this, "🎱 تم تشغيل التتبع التلقائي! هز الهاتف في أي وقت للإخفاء/الإظهار", Toast.LENGTH_LONG).show()
+            binding.tvOverlayStatus.text = "🟢 المساعد المباشر ومحرك التتبع يعملان بنجاح • المود منيو 🎯 ظاهر الآن"
+            binding.tvOverlayStatus.setTextColor(ContextCompat.getColor(this, R.color.accent_green))
 
-            binding.root.postDelayed({
-                moveTaskToBack(true)
-            }, 300)
+            Toast.makeText(
+                this,
+                "🎯 تم تشغيل Aim Master! نافذة المود منيو ظاهرة الآن فوق الشاشة. يمكنك فتح اللعبة في أي وقت 🎱",
+                Toast.LENGTH_LONG
+            ).show()
         } else {
             Toast.makeText(this, "يلزم السماح ببث الشاشة لتتبع حركة العصا والكرات تلقائياً", Toast.LENGTH_SHORT).show()
         }
@@ -60,10 +63,18 @@ class MainActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        // Global crash guard to prevent silent closes and record exact errors
+        val defaultHandler = Thread.getDefaultUncaughtExceptionHandler()
+        Thread.setDefaultUncaughtExceptionHandler { thread, throwable ->
+            Log.e("AimMasterCrash", "Uncaught exception in thread ${thread.name}", throwable)
+            defaultHandler?.uncaughtException(thread, throwable)
+        }
+
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
-        // Initialize OpenCV 4.9.0 local native engine
+        // Initialize OpenCV 4.9.0 local native engine safely
         try {
             if (OpenCVLoader.initLocal()) {
                 Log.i("AimMasterOpenCV", "OpenCV 4.9.0 initialized successfully via initLocal()")
@@ -100,6 +111,16 @@ class MainActivity : AppCompatActivity() {
         binding.btnStopOverlay.setOnClickListener {
             stopAimService()
         }
+
+        binding.btnLaunchGame.setOnClickListener {
+            val pm = packageManager
+            val launchIntent = pm.getLaunchIntentForPackage("com.miniclip.eightballpool")
+            if (launchIntent != null) {
+                startActivity(launchIntent)
+            } else {
+                Toast.makeText(this, "افتح لعبة 8 Ball Pool على هاتفك وستجد نافذة المود منيو 🎯 جاهزة ومباشرة فوق اللعبة!", Toast.LENGTH_LONG).show()
+            }
+        }
     }
 
     private fun checkOverlayPermission(): Boolean {
@@ -126,16 +147,33 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun updatePermissionStatus() {
+        if (AimOverlayService.isRunning) {
+            binding.tvOverlayStatus.text = "🟢 المساعد المباشر ومحرك التتبع يعملان بنجاح • المود منيو 🎯 ظاهر الآن"
+            binding.tvOverlayStatus.setTextColor(ContextCompat.getColor(this, R.color.accent_green))
+            binding.btnGrantPermission.visibility = View.GONE
+            binding.btnStartOverlay.visibility = View.GONE
+            binding.btnStopOverlay.visibility = View.VISIBLE
+            binding.btnLaunchGame.visibility = View.VISIBLE
+            return
+        }
+
+        binding.btnLaunchGame.visibility = View.GONE
+
         val hasPermission = checkOverlayPermission()
         if (hasPermission) {
             binding.tvOverlayStatus.text = "الحالة: جاهز للتشغيل • التتبع التلقائي لعصا البلياردو والكرات"
             binding.tvOverlayStatus.setTextColor(ContextCompat.getColor(this, R.color.accent_green))
             binding.btnGrantPermission.visibility = View.GONE
+            binding.btnStartOverlay.visibility = View.VISIBLE
             binding.btnStartOverlay.isEnabled = true
+            binding.btnStopOverlay.visibility = View.GONE
         } else {
             binding.tvOverlayStatus.text = "الحالة: مطلوب إذن الظهور فوق التطبيقات"
             binding.tvOverlayStatus.setTextColor(ContextCompat.getColor(this, R.color.accent_orange))
             binding.btnGrantPermission.visibility = View.VISIBLE
+            binding.btnStartOverlay.visibility = View.VISIBLE
+            binding.btnStartOverlay.isEnabled = false
+            binding.btnStopOverlay.visibility = View.GONE
         }
     }
 
@@ -146,8 +184,7 @@ class MainActivity : AppCompatActivity() {
         startService(serviceIntent)
         isServiceRunning = false
 
-        binding.btnStartOverlay.visibility = View.VISIBLE
-        binding.btnStopOverlay.visibility = View.GONE
-        Toast.makeText(this, "تم إيقاف المساعد", Toast.LENGTH_SHORT).show()
+        updatePermissionStatus()
+        Toast.makeText(this, "تم إيقاف المساعد بنجاح", Toast.LENGTH_SHORT).show()
     }
 }

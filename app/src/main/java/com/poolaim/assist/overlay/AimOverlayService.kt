@@ -65,6 +65,9 @@ class AimOverlayService : Service(), SensorEventListener {
         const val ACTION_STOP = "com.poolaim.assist.ACTION_STOP"
         const val EXTRA_RESULT_CODE = "extra_result_code"
         const val EXTRA_RESULT_DATA = "extra_result_data"
+
+        @Volatile
+        var isRunning = false
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
@@ -72,7 +75,7 @@ class AimOverlayService : Service(), SensorEventListener {
     override fun onCreate() {
         super.onCreate()
         try {
-            // Initialize OpenCV 4.9.0 native C++ acceleration engine
+            // Initialize OpenCV 4.9.0 native C++ acceleration engine safely
             try {
                 OpenCVLoader.initLocal()
             } catch (e: Throwable) {
@@ -80,24 +83,31 @@ class AimOverlayService : Service(), SensorEventListener {
             }
 
             windowManager = getSystemService(Context.WINDOW_SERVICE) as WindowManager
-
             createNotificationChannel()
 
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                startForeground(
-                    NOTIFICATION_ID,
-                    createNotification(),
-                    ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION
-                )
-            } else {
+            // Safe startup notification (MediaProjection type must ONLY be passed in onStartCommand after token is ready!)
+            try {
                 startForeground(NOTIFICATION_ID, createNotification())
+            } catch (e: Throwable) {
+                e.printStackTrace()
             }
 
-            initCanvasOverlay()
-            initModMenu()
+            // Guard overlay view creation to prevent BadTokenException if permission revoked
+            val canOverlay = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                Settings.canDrawOverlays(this)
+            } else {
+                true
+            }
+
+            if (canOverlay) {
+                initCanvasOverlay()
+                initModMenu()
+            }
+
             initShakeSensor()
             initDisplayListener()
 
+            isRunning = true
             Toast.makeText(this, "🎯 تم تشغيل Aim Master! نافذة المود منيو جاهزة على الشاشة 🎱", Toast.LENGTH_SHORT).show()
         } catch (e: Exception) {
             e.printStackTrace()
@@ -565,6 +575,19 @@ class AimOverlayService : Service(), SensorEventListener {
             return START_NOT_STICKY
         }
 
+        // Ensure overlays are attached if permission is granted
+        val canOverlay = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            Settings.canDrawOverlays(this)
+        } else {
+            true
+        }
+        if (canOverlay && canvasView == null) {
+            initCanvasOverlay()
+        }
+        if (canOverlay && modMenuView == null) {
+            initModMenu()
+        }
+
         // Initialize MediaProjection and start real-time ScreenAimTracker
         val resultCode = intent?.getIntExtra(EXTRA_RESULT_CODE, Activity.RESULT_CANCELED) ?: Activity.RESULT_CANCELED
         val resultData: Intent? = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
@@ -579,7 +602,33 @@ class AimOverlayService : Service(), SensorEventListener {
                 val mpManager = getSystemService(Context.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
                 mediaProjection = mpManager.getMediaProjection(resultCode, resultData)
 
+                // Android 14+ STRICT REQUIREMENT: Call startForeground with FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION
+                // only AFTER getMediaProjection is active!
+                try {
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                        startForeground(
+                            NOTIFICATION_ID,
+                            createNotification(),
+                            ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION
+                        )
+                    } else {
+                        startForeground(NOTIFICATION_ID, createNotification())
+                    }
+                } catch (e: Throwable) {
+                    e.printStackTrace()
+                }
+
                 mediaProjection?.let { mp ->
+                    // Handle unexpected stop gracefully
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                        mp.registerCallback(object : MediaProjection.Callback() {
+                            override fun onStop() {
+                                super.onStop()
+                                stopSelf()
+                            }
+                        }, Handler(Looper.getMainLooper()))
+                    }
+
                     aimTracker?.stop()
                     aimTracker = ScreenAimTracker(this, mp, object : ScreenAimTracker.OnAimDataListener {
                         override fun onAimUpdated(
@@ -603,6 +652,7 @@ class AimOverlayService : Service(), SensorEventListener {
 
     override fun onDestroy() {
         super.onDestroy()
+        isRunning = false
         try {
             displayListener?.let { displayManager?.unregisterDisplayListener(it) }
 
@@ -615,7 +665,10 @@ class AimOverlayService : Service(), SensorEventListener {
             sensorManager?.unregisterListener(this)
 
             canvasView?.let { if (it.isAttachedToWindow) windowManager.removeView(it) }
+            canvasView = null
+
             modMenuView?.let { if (it.isAttachedToWindow) windowManager.removeView(it) }
+            modMenuView = null
         } catch (e: Exception) {
             e.printStackTrace()
         }

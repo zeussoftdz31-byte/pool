@@ -77,6 +77,7 @@ class ScreenAimTracker(
     private var isOpenCvReady = false
 
     fun start() {
+        stop()
         try {
             isOpenCvReady = OpenCVLoader.initLocal()
         } catch (e: Throwable) {
@@ -89,16 +90,16 @@ class ScreenAimTracker(
         display.getRealSize(size)
 
         // 8 Ball Pool landscape orientation
-        screenWidth = maxOf(size.x, size.y)
-        screenHeight = minOf(size.x, size.y)
+        screenWidth = maxOf(320, maxOf(size.x, size.y))
+        screenHeight = maxOf(240, minOf(size.x, size.y))
 
         // Calculate capture resolution matching the EXACT physical aspect ratio!
         // 480p height is optimal for mobile OpenCV processing (sub-2ms HoughCircles)
         captureHeight = 480
         val aspect = screenWidth.toFloat() / screenHeight.toFloat()
-        captureWidth = ((captureHeight * aspect) / 16).toInt() * 16 // Align to multiple of 16 for GPU encoder
+        captureWidth = maxOf(16, ((captureHeight * aspect) / 16).toInt() * 16) // Align to multiple of 16 for GPU encoder
 
-        handlerThread = HandlerThread("PoolAimVisionWorker", android.os.Process.THREAD_PRIORITY_MORE_FAVORABLE).apply { start() }
+        handlerThread = HandlerThread("PoolAimVisionWorker").apply { start() }
         backgroundHandler = Handler(handlerThread!!.looper)
 
         imageReader = ImageReader.newInstance(
@@ -227,21 +228,27 @@ class ScreenAimTracker(
         val detectedBalls = mutableListOf<CircleBall>()
 
         if (isOpenCvReady) {
+            var rgbaMat: Mat? = null
+            var screenRoiMat: Mat? = null
+            var grayMat: Mat? = null
+            var tableRoiGray: Mat? = null
+            var circlesMat: Mat? = null
             try {
+                buffer.rewind()
                 val fullCols = rowStride / pixelStride
-                val rgbaMat = Mat(height, fullCols, CvType.CV_8UC4, buffer)
-                val screenRoiMat = rgbaMat.submat(0, height, 0, width)
-                val grayMat = Mat()
+                rgbaMat = Mat(height, fullCols, CvType.CV_8UC4, buffer)
+                screenRoiMat = rgbaMat.submat(0, height, 0, width)
+                grayMat = Mat()
                 Imgproc.cvtColor(screenRoiMat, grayMat, Imgproc.COLOR_RGBA2GRAY)
 
                 // Only blur & search inside table playing surface (ROI) for 10x faster execution!
                 val roiW = tableEndX - tableStartX
                 val roiH = tableEndY - tableStartY
                 if (roiW > 0 && roiH > 0) {
-                    val tableRoiGray = grayMat.submat(tableStartY, tableEndY, tableStartX, tableEndX)
+                    tableRoiGray = grayMat.submat(tableStartY, tableEndY, tableStartX, tableEndX)
                     Imgproc.GaussianBlur(tableRoiGray, tableRoiGray, Size(5.0, 5.0), 1.2)
 
-                    val circlesMat = Mat()
+                    circlesMat = Mat()
                     val minR = (ballRadiusEst * 0.70f).toInt()
                     val maxR = (ballRadiusEst * 1.35f).toInt()
                     val minDist = (ballRadiusEst * 1.70f).toDouble()
@@ -266,16 +273,15 @@ class ScreenAimTracker(
                         val br = d[2].toFloat()
                         detectedBalls.add(CircleBall(bx, by, br))
                     }
-
-                    circlesMat.release()
-                    tableRoiGray.release()
                 }
-
-                grayMat.release()
-                screenRoiMat.release()
-                rgbaMat.release()
             } catch (e: Throwable) {
-                e.printStackTrace()
+                // Ignore frame parse error to maintain fluid 30 FPS stream
+            } finally {
+                circlesMat?.release()
+                tableRoiGray?.release()
+                grayMat?.release()
+                screenRoiMat?.release()
+                rgbaMat?.release()
             }
         }
 
