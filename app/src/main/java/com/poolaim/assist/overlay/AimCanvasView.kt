@@ -311,6 +311,22 @@ class AimCanvasView(context: Context) : View(context) {
         }
     }
 
+    fun autoFitToScreen(w: Int, h: Int) {
+        val isLandscape = w > h
+        val screenW = if (isLandscape) w.toFloat() else h.toFloat()
+        val screenH = if (isLandscape) h.toFloat() else w.toFloat()
+
+        offsetX = 0f
+        offsetY = 0f
+        tableZoom = 1.0f
+        tableScaleX = 1.0f
+        tableScaleY = 1.0f
+        pocketScale = 1.0f
+        showTableCushions = true
+        saveCalibration()
+        recalculateTableBounds(w, h)
+    }
+
     override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
         super.onSizeChanged(w, h, oldw, oldh)
         viewWidth = w

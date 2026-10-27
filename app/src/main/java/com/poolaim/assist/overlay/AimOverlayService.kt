@@ -7,16 +7,15 @@ import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.graphics.Color
 import android.graphics.PixelFormat
+import android.graphics.Point
 import android.hardware.Sensor
 import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
 import android.hardware.SensorManager
+import android.hardware.display.DisplayManager
 import android.media.projection.MediaProjection
 import android.media.projection.MediaProjectionManager
-import android.os.Build
-import android.os.IBinder
-import android.os.VibrationEffect
-import android.os.Vibrator
+import android.os.*
 import android.view.*
 import android.widget.SeekBar
 import android.widget.TextView
@@ -31,21 +30,26 @@ import kotlin.math.*
 
 /**
  * Foreground Service managing:
- * 1. ScreenAimTracker real-time computer vision engine for full automatic cue & ball tracking.
- * 2. Full-screen transparent AimCanvasView rendering continuous laser trajectories,
- *    cushion reflections, and exact friction stop circles.
- * 3. Draggable Wizard Pool 8 Mod Menu (Collapsible floating icon + Expandable Mod Menu).
- * 4. Shake-to-Toggle accelerometer gesture.
+ * 1. ScreenAimTracker real-time zero-freeze computer vision engine.
+ * 2. Full-screen transparent AimCanvasView rendering continuous laser trajectories.
+ * 3. Draggable Wizard iOS-style Mod Menu (Default open, draggable header, collapsible floating icon).
+ * 4. Orientation change listener (auto-adapts from portrait to landscape when entering 8 Ball Pool).
+ * 5. Shake-to-Toggle accelerometer sensor for instant hide/show of the Mod Menu window.
  */
 class AimOverlayService : Service(), SensorEventListener {
 
     private lateinit var windowManager: WindowManager
     private var canvasView: AimCanvasView? = null
     private var modMenuView: View? = null
+    private var modMenuParams: WindowManager.LayoutParams? = null
 
     // Screen tracking
     private var mediaProjection: MediaProjection? = null
     private var aimTracker: ScreenAimTracker? = null
+
+    // Display rotation listener
+    private var displayManager: DisplayManager? = null
+    private var displayListener: DisplayManager.DisplayListener? = null
 
     // Shake sensor
     private var sensorManager: SensorManager? = null
@@ -53,6 +57,7 @@ class AimOverlayService : Service(), SensorEventListener {
     private var accelCurrent = SensorManager.GRAVITY_EARTH
     private var accelLast = SensorManager.GRAVITY_EARTH
     private var overlayVisible = true
+    private var isModMenuWindowVisible = true
 
     companion object {
         const val CHANNEL_ID = "pool_aim_assist_channel"
@@ -91,8 +96,9 @@ class AimOverlayService : Service(), SensorEventListener {
             initCanvasOverlay()
             initModMenu()
             initShakeSensor()
+            initDisplayListener()
 
-            Toast.makeText(this, "🎯 تم تشغيل Aim Master Mod! انقر الأيقونة العائمة لفتح القائمة 🎱", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, "🎯 تم تشغيل Aim Master! نافذة المود منيو جاهزة على الشاشة 🎱", Toast.LENGTH_SHORT).show()
         } catch (e: Exception) {
             e.printStackTrace()
             try {
@@ -130,8 +136,8 @@ class AimOverlayService : Service(), SensorEventListener {
         )
 
         return NotificationCompat.Builder(this, CHANNEL_ID)
-            .setContentTitle("Aim Master Mod v2.0")
-            .setContentText("التتبع التلقائي المدعوم بـ OpenCV يعمل الآن")
+            .setContentTitle("Aim Master Mod v2.5")
+            .setContentText("المود منيو ومحرك التتبع التلقائي يعملان الآن")
             .setSmallIcon(android.R.drawable.sym_def_app_icon)
             .addAction(android.R.drawable.ic_menu_close_clear_cancel, "إيقاف", stopPendingIntent)
             .setOngoing(true)
@@ -150,7 +156,6 @@ class AimOverlayService : Service(), SensorEventListener {
                 WindowManager.LayoutParams.TYPE_PHONE
             }
 
-            // Fullscreen transparent overlay - passes 100% of touches directly through to 8 Ball Pool!
             val params = WindowManager.LayoutParams(
                 WindowManager.LayoutParams.MATCH_PARENT,
                 WindowManager.LayoutParams.MATCH_PARENT,
@@ -184,68 +189,99 @@ class AimOverlayService : Service(), SensorEventListener {
             }
 
             val density = resources.displayMetrics.density
+            val displaySize = Point()
+            windowManager.defaultDisplay.getRealSize(displaySize)
+            val screenW = maxOf(displaySize.x, displaySize.y)
+            val screenH = minOf(displaySize.x, displaySize.y)
+
+            // Responsive dimensions for landscape screens: 370dp wide, 240dp high
+            val expandedWidth = minOf((370 * density).toInt(), (screenW * 0.70f).toInt())
+            val expandedHeight = minOf((245 * density).toInt(), (screenH * 0.85f).toInt())
+            val collapsedSize = (54 * density).toInt()
+
             val params = WindowManager.LayoutParams(
-                WindowManager.LayoutParams.WRAP_CONTENT,
-                WindowManager.LayoutParams.WRAP_CONTENT,
+                expandedWidth,
+                expandedHeight,
                 layoutType,
                 WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
                         WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
                 PixelFormat.TRANSLUCENT
             ).apply {
                 gravity = Gravity.TOP or Gravity.START
-                x = (16 * density).toInt()
-                y = (48 * density).toInt()
+                x = (24 * density).toInt()
+                y = (32 * density).toInt()
             }
+            modMenuParams = params
 
             val layoutCollapsedBadge = modMenuView?.findViewById<View>(R.id.layoutCollapsedBadge)
             val layoutExpandedMenu = modMenuView?.findViewById<View>(R.id.layoutExpandedMenu)
+            val layoutHeaderDrag = modMenuView?.findViewById<View>(R.id.layoutHeaderDrag)
             val btnMinimizeMenu = modMenuView?.findViewById<View>(R.id.btnMinimizeMenu)
 
+            // Start EXPANDED by default so user sees menu immediately!
+            layoutCollapsedBadge?.visibility = View.GONE
+            layoutExpandedMenu?.visibility = View.VISIBLE
 
-            // Draggable Floating Pill / Menu
+            // Draggable Floating Pill / Badge
             var initialX = 0
             var initialY = 0
             var initialTouchX = 0f
             var initialTouchY = 0f
             var isClick = false
 
-            layoutCollapsedBadge?.setOnTouchListener { _, event ->
-                when (event.action) {
-                    MotionEvent.ACTION_DOWN -> {
-                        initialX = params.x
-                        initialY = params.y
-                        initialTouchX = event.rawX
-                        initialTouchY = event.rawY
-                        isClick = true
-                        true
-                    }
-                    MotionEvent.ACTION_MOVE -> {
-                        val dx = event.rawX - initialTouchX
-                        val dy = event.rawY - initialTouchY
-                        if (abs(dx) > 10 || abs(dy) > 10) {
-                            isClick = false
+            fun setupDragTouch(targetView: View?, onClickAction: () -> Unit) {
+                targetView?.setOnTouchListener { _, event ->
+                    val p = modMenuParams ?: return@setOnTouchListener false
+                    when (event.action) {
+                        MotionEvent.ACTION_DOWN -> {
+                            initialX = p.x
+                            initialY = p.y
+                            initialTouchX = event.rawX
+                            initialTouchY = event.rawY
+                            isClick = true
+                            true
                         }
-                        params.x = initialX + dx.toInt()
-                        params.y = initialY + dy.toInt()
-                        modMenuView?.let { windowManager.updateViewLayout(it, params) }
-                        true
-                    }
-                    MotionEvent.ACTION_UP -> {
-                        if (isClick) {
-                            // Expand the Mod Menu!
-                            layoutCollapsedBadge.visibility = View.GONE
-                            layoutExpandedMenu?.visibility = View.VISIBLE
+                        MotionEvent.ACTION_MOVE -> {
+                            val dx = event.rawX - initialTouchX
+                            val dy = event.rawY - initialTouchY
+                            if (abs(dx) > 8 || abs(dy) > 8) {
+                                isClick = false
+                            }
+                            p.x = initialX + dx.toInt()
+                            p.y = initialY + dy.toInt()
+                            modMenuView?.let { windowManager.updateViewLayout(it, p) }
+                            true
                         }
-                        true
+                        MotionEvent.ACTION_UP -> {
+                            if (isClick) {
+                                onClickAction()
+                            }
+                            true
+                        }
+                        else -> false
                     }
-                    else -> false
                 }
             }
 
-            // Minimize Mod Menu
+            // Click Badge -> Expand Menu
+            setupDragTouch(layoutCollapsedBadge) {
+                layoutCollapsedBadge?.visibility = View.GONE
+                layoutExpandedMenu?.visibility = View.VISIBLE
+                modMenuParams?.width = expandedWidth
+                modMenuParams?.height = expandedHeight
+                modMenuView?.let { windowManager.updateViewLayout(it, modMenuParams) }
+            }
+
+            // Drag Header of Expanded Menu
+            setupDragTouch(layoutHeaderDrag) {}
+
+            // Click Minimize -> Collapse into 🎯 Badge
             btnMinimizeMenu?.setOnClickListener {
                 layoutExpandedMenu?.visibility = View.GONE
                 layoutCollapsedBadge?.visibility = View.VISIBLE
+                modMenuParams?.width = collapsedSize
+                modMenuParams?.height = collapsedSize
+                modMenuView?.let { windowManager.updateViewLayout(it, modMenuParams) }
             }
 
             // ========================================================
@@ -259,8 +295,8 @@ class AimOverlayService : Service(), SensorEventListener {
             val tvTabAimText = modMenuView?.findViewById<TextView>(R.id.tvTabAimText)
             val tvTabSettingsText = modMenuView?.findViewById<TextView>(R.id.tvTabSettingsText)
 
-            val layoutContentAim = modMenuView?.findViewById<View>(R.id.layoutContentAim)
             val layoutContentVisuals = modMenuView?.findViewById<View>(R.id.layoutContentVisuals)
+            val layoutContentAim = modMenuView?.findViewById<View>(R.id.layoutContentAim)
             val layoutContentSettings = modMenuView?.findViewById<View>(R.id.layoutContentSettings)
             val tvCurrentTabTitle = modMenuView?.findViewById<TextView>(R.id.tvCurrentTabTitle)
 
@@ -273,12 +309,12 @@ class AimOverlayService : Service(), SensorEventListener {
                 tvTabAimText?.setTextColor(Color.parseColor("#94A3B8"))
                 tvTabSettingsText?.setTextColor(Color.parseColor("#94A3B8"))
 
-                layoutContentAim?.visibility = View.GONE
                 layoutContentVisuals?.visibility = View.GONE
+                layoutContentAim?.visibility = View.GONE
                 layoutContentSettings?.visibility = View.GONE
 
                 when (tabIndex) {
-                    0 -> { // Visuals
+                    0 -> { // Visuals (Active by default)
                         btnTabVisuals?.setBackgroundResource(R.drawable.bg_tab_active)
                         tvTabVisualsText?.setTextColor(Color.parseColor("#38BDF8"))
                         layoutContentVisuals?.visibility = View.VISIBLE
@@ -304,52 +340,20 @@ class AimOverlayService : Service(), SensorEventListener {
             btnTabSettings?.setOnClickListener { switchTab(2) }
 
             // ========================================================
-            // TAB 1: AIM MENU CONTROLS
-            // ========================================================
-            val switchAutoAim = modMenuView?.findViewById<SwitchCompat>(R.id.switchAutoAim)
-            val switchAimToggleIcon = modMenuView?.findViewById<SwitchCompat>(R.id.switchAimToggleIcon)
-            val switchAutoPlay = modMenuView?.findViewById<SwitchCompat>(R.id.switchAutoPlay)
-            val switchNominatePocket = modMenuView?.findViewById<SwitchCompat>(R.id.switchNominatePocket)
-            val seekAimPower = modMenuView?.findViewById<SeekBar>(R.id.seekAimPower)
-            val tvAimPowerVal = modMenuView?.findViewById<TextView>(R.id.tvAimPowerVal)
-
-            switchAutoAim?.setOnCheckedChangeListener { _, isChecked ->
-                canvasView?.let {
-                    it.isMasterOverlayEnabled = isChecked
-                    it.visibility = if (isChecked) View.VISIBLE else View.GONE
-                    it.postInvalidate()
-                }
-                aimTracker?.isAutoTrackingEnabled = isChecked
-            }
-
-            switchAimToggleIcon?.setOnCheckedChangeListener { _, isChecked ->
-                layoutCollapsedBadge?.visibility = if (isChecked) View.VISIBLE else View.GONE
-            }
-
-            val initialPower = canvasView?.shotPowerPercent ?: 0.85f
-            seekAimPower?.progress = (initialPower * 100).toInt()
-            tvAimPowerVal?.text = String.format("%.2f", initialPower)
-
-            seekAimPower?.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
-                override fun onProgressChanged(sb: SeekBar?, progress: Int, fromUser: Boolean) {
-                    val p = (progress / 100f).coerceIn(0.15f, 1.0f)
-                    tvAimPowerVal?.text = String.format("%.2f", p)
-                    canvasView?.shotPowerPercent = p
-                    canvasView?.postInvalidate()
-                }
-                override fun onStartTrackingTouch(sb: SeekBar?) {}
-                override fun onStopTrackingTouch(sb: SeekBar?) {}
-            })
-
-            // ========================================================
-            // TAB 2: VISUALS (Table Zoom & Pocket Scaling)
+            // TAB 1: VISUALS (Table Zoom, Pocket Size, D-Pad, Auto-Fit)
             // ========================================================
             val seekTableZoom = modMenuView?.findViewById<SeekBar>(R.id.seekTableZoom)
             val tvTableZoomVal = modMenuView?.findViewById<TextView>(R.id.tvTableZoomVal)
             val seekPocketSize = modMenuView?.findViewById<SeekBar>(R.id.seekPocketSize)
             val tvPocketSizeVal = modMenuView?.findViewById<TextView>(R.id.tvPocketSizeVal)
-            val switchShowCushions = modMenuView?.findViewById<SwitchCompat>(R.id.switchShowCushions)
+            val btnCalibLeft = modMenuView?.findViewById<View>(R.id.btnCalibLeft)
+            val btnCalibRight = modMenuView?.findViewById<View>(R.id.btnCalibRight)
+            val btnCalibUp = modMenuView?.findViewById<View>(R.id.btnCalibUp)
+            val btnCalibDown = modMenuView?.findViewById<View>(R.id.btnCalibDown)
+            val btnResetCalib = modMenuView?.findViewById<View>(R.id.btnResetCalib)
+            val btnAutoFitDpi = modMenuView?.findViewById<View>(R.id.btnAutoFitDpi)
             val switchMasterAim = modMenuView?.findViewById<SwitchCompat>(R.id.switchMasterAim)
+            val switchShowCushions = modMenuView?.findViewById<SwitchCompat>(R.id.switchShowCushions)
 
             val initialZoom = canvasView?.tableZoom ?: 1.0f
             seekTableZoom?.progress = ((initialZoom - 0.35f) * 100f).toInt().coerceIn(0, 135)
@@ -379,6 +383,33 @@ class AimOverlayService : Service(), SensorEventListener {
                 override fun onStopTrackingTouch(sb: SeekBar?) {}
             })
 
+            // Table Position D-Pad adjustments
+            btnCalibLeft?.setOnClickListener { canvasView?.adjustCalibration(-8f, 0f, 0f, 0f, 0f, 0f) }
+            btnCalibRight?.setOnClickListener { canvasView?.adjustCalibration(8f, 0f, 0f, 0f, 0f, 0f) }
+            btnCalibUp?.setOnClickListener { canvasView?.adjustCalibration(0f, -8f, 0f, 0f, 0f, 0f) }
+            btnCalibDown?.setOnClickListener { canvasView?.adjustCalibration(0f, 8f, 0f, 0f, 0f, 0f) }
+
+            btnResetCalib?.setOnClickListener {
+                canvasView?.resetCalibration()
+                seekTableZoom?.progress = 65
+                seekPocketSize?.progress = 60
+                switchShowCushions?.isChecked = true
+                tvTableZoomVal?.text = "100%"
+                tvPocketSizeVal?.text = "100%"
+                Toast.makeText(this, "تمت إعادة ضبط الطاولة والجيوب بنجاح", Toast.LENGTH_SHORT).show()
+            }
+
+            btnAutoFitDpi?.setOnClickListener {
+                val size = Point()
+                windowManager.defaultDisplay.getRealSize(size)
+                canvasView?.autoFitToScreen(size.x, size.y)
+                seekTableZoom?.progress = 65
+                seekPocketSize?.progress = 60
+                tvTableZoomVal?.text = "100%"
+                tvPocketSizeVal?.text = "100%"
+                Toast.makeText(this, "🎯 تم ضبط الأبعاد والمقاييس تلقائياً حسب الشاشة", Toast.LENGTH_SHORT).show()
+            }
+
             switchShowCushions?.isChecked = canvasView?.showTableCushions ?: true
             switchShowCushions?.setOnCheckedChangeListener { _, isChecked ->
                 canvasView?.showTableCushions = isChecked
@@ -396,20 +427,21 @@ class AimOverlayService : Service(), SensorEventListener {
             }
 
             // ========================================================
-            // TAB 3: SETTINGS & CALIBRATION
+            // TAB 2: AIM MENU CONTROLS
             // ========================================================
-            val switchBankShots = modMenuView?.findViewById<SwitchCompat>(R.id.switchBankShots)
+            val switchAutoAim = modMenuView?.findViewById<SwitchCompat>(R.id.switchAutoAim)
             val switchCueBallPath = modMenuView?.findViewById<SwitchCompat>(R.id.switchCueBallPath)
-            val btnCalibLeft = modMenuView?.findViewById<View>(R.id.btnCalibLeft)
-            val btnCalibRight = modMenuView?.findViewById<View>(R.id.btnCalibRight)
-            val btnCalibUp = modMenuView?.findViewById<View>(R.id.btnCalibUp)
-            val btnCalibDown = modMenuView?.findViewById<View>(R.id.btnCalibDown)
-            val btnResetCalib = modMenuView?.findViewById<View>(R.id.btnResetCalib)
-            val btnCloseMod = modMenuView?.findViewById<View>(R.id.btnCloseMod)
+            val switchBankShots = modMenuView?.findViewById<SwitchCompat>(R.id.switchBankShots)
+            val seekAimPower = modMenuView?.findViewById<SeekBar>(R.id.seekAimPower)
+            val tvAimPowerVal = modMenuView?.findViewById<TextView>(R.id.tvAimPowerVal)
 
-            switchBankShots?.setOnCheckedChangeListener { _, isChecked ->
-                canvasView?.enableBankShots = isChecked
-                canvasView?.postInvalidate()
+            switchAutoAim?.setOnCheckedChangeListener { _, isChecked ->
+                canvasView?.let {
+                    it.isMasterOverlayEnabled = isChecked
+                    it.visibility = if (isChecked) View.VISIBLE else View.GONE
+                    it.postInvalidate()
+                }
+                aimTracker?.isAutoTrackingEnabled = isChecked
             }
 
             switchCueBallPath?.setOnCheckedChangeListener { _, isChecked ->
@@ -417,24 +449,59 @@ class AimOverlayService : Service(), SensorEventListener {
                 canvasView?.postInvalidate()
             }
 
-            btnCalibLeft?.setOnClickListener { canvasView?.adjustCalibration(-5f, 0f, 0f, 0f, 0f, 0f) }
-            btnCalibRight?.setOnClickListener { canvasView?.adjustCalibration(5f, 0f, 0f, 0f, 0f, 0f) }
-            btnCalibUp?.setOnClickListener { canvasView?.adjustCalibration(0f, -5f, 0f, 0f, 0f, 0f) }
-            btnCalibDown?.setOnClickListener { canvasView?.adjustCalibration(0f, 5f, 0f, 0f, 0f, 0f) }
-
-            btnResetCalib?.setOnClickListener {
-                canvasView?.resetCalibration()
-                seekTableZoom?.progress = 65
-                seekPocketSize?.progress = 60
-                switchShowCushions?.isChecked = true
-                tvTableZoomVal?.text = "100%"
-                tvPocketSizeVal?.text = "100%"
-                Toast.makeText(this, "تمت إعادة ضبط الطاولة والجيوب بنجاح", Toast.LENGTH_SHORT).show()
+            switchBankShots?.setOnCheckedChangeListener { _, isChecked ->
+                canvasView?.enableBankShots = isChecked
+                canvasView?.postInvalidate()
             }
 
+            val initialPower = canvasView?.shotPowerPercent ?: 0.85f
+            seekAimPower?.progress = (initialPower * 100).toInt()
+            tvAimPowerVal?.text = String.format("%.2f", initialPower)
+
+            seekAimPower?.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+                override fun onProgressChanged(sb: SeekBar?, progress: Int, fromUser: Boolean) {
+                    val p = (progress / 100f).coerceIn(0.15f, 1.0f)
+                    tvAimPowerVal?.text = String.format("%.2f", p)
+                    canvasView?.shotPowerPercent = p
+                    canvasView?.postInvalidate()
+                }
+                override fun onStartTrackingTouch(sb: SeekBar?) {}
+                override fun onStopTrackingTouch(sb: SeekBar?) {}
+            })
+
+            // ========================================================
+            // TAB 3: SETTINGS & EXIT
+            // ========================================================
+            val btnCloseMod = modMenuView?.findViewById<View>(R.id.btnCloseMod)
             btnCloseMod?.setOnClickListener { stopSelf() }
 
             windowManager.addView(modMenuView, params)
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+
+    private fun initDisplayListener() {
+        try {
+            displayManager = getSystemService(Context.DISPLAY_SERVICE) as? DisplayManager
+            displayListener = object : DisplayManager.DisplayListener {
+                override fun onDisplayAdded(displayId: Int) {}
+                override fun onDisplayRemoved(displayId: Int) {}
+                override fun onDisplayChanged(displayId: Int) {
+                    updateDisplayOrientation()
+                }
+            }
+            displayManager?.registerDisplayListener(displayListener, Handler(Looper.getMainLooper()))
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+
+    private fun updateDisplayOrientation() {
+        try {
+            val size = Point()
+            windowManager.defaultDisplay.getRealSize(size)
+            canvasView?.recalculateTableBounds(size.x, size.y)
         } catch (e: Exception) {
             e.printStackTrace()
         }
@@ -451,8 +518,6 @@ class AimOverlayService : Service(), SensorEventListener {
             e.printStackTrace()
         }
     }
-
-    private var isModMenuWindowVisible = true
 
     fun toggleModMenuWindowVisibility() {
         isModMenuWindowVisible = !isModMenuWindowVisible
@@ -479,20 +544,6 @@ class AimOverlayService : Service(), SensorEventListener {
     }
 
     override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {}
-
-    private fun toggleOverlayVisibility() {
-        overlayVisible = !overlayVisible
-        val vis = if (overlayVisible) View.VISIBLE else View.GONE
-        canvasView?.visibility = vis
-        canvasView?.isMasterOverlayEnabled = overlayVisible
-        aimTracker?.isAutoTrackingEnabled = overlayVisible
-
-        val switchMasterAim = modMenuView?.findViewById<SwitchCompat>(R.id.switchMasterAim)
-        val switchAutoAim = modMenuView?.findViewById<SwitchCompat>(R.id.switchAutoAim)
-        switchMasterAim?.isChecked = overlayVisible
-        switchAutoAim?.isChecked = overlayVisible
-        canvasView?.postInvalidate()
-    }
 
     private fun vibrateFeedback() {
         try {
@@ -553,6 +604,8 @@ class AimOverlayService : Service(), SensorEventListener {
     override fun onDestroy() {
         super.onDestroy()
         try {
+            displayListener?.let { displayManager?.unregisterDisplayListener(it) }
+
             aimTracker?.stop()
             aimTracker = null
 

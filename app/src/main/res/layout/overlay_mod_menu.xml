@@ -4,58 +4,60 @@
     android:layout_width="wrap_content"
     android:layout_height="wrap_content">
 
-    <!-- 1. Circular Floating Mod Icon (Matching Wizard iOS in the screenshot) -->
+    <!-- 1. Circular Floating Mod Icon (Badge when minimized) -->
     <LinearLayout
         android:id="@+id/layoutCollapsedBadge"
-        android:layout_width="48dp"
-        android:layout_height="48dp"
+        android:layout_width="52dp"
+        android:layout_height="52dp"
         android:background="@drawable/bg_floating_circle"
         android:gravity="center"
         android:elevation="18dp"
-        android:visibility="visible">
+        android:visibility="gone">
 
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="🎯"
-            android:textSize="22sp" />
+            android:textSize="24sp" />
     </LinearLayout>
 
-    <!-- 2. Expanded Floating Mod Menu (Matching Wizard iOS layout with Left Sidebar & Right Content) -->
+    <!-- 2. Expanded Floating Mod Menu (Open by default, 3 Tabs with Visuals as default) -->
     <LinearLayout
         android:id="@+id/layoutExpandedMenu"
-        android:layout_width="470dp"
-        android:layout_height="265dp"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
         android:orientation="horizontal"
         android:background="@drawable/bg_mod_menu_card"
         android:padding="8dp"
         android:elevation="22dp"
-        android:visibility="gone">
+        android:visibility="visible">
 
         <!-- ============================================== -->
         <!-- LEFT SIDEBAR: Avatar, Title, Tabs, Version    -->
         <!-- ============================================== -->
         <LinearLayout
-            android:layout_width="125dp"
+            android:id="@+id/layoutSidebar"
+            android:layout_width="120dp"
             android:layout_height="match_parent"
             android:orientation="vertical"
             android:paddingEnd="6dp"
             android:gravity="center_horizontal">
 
-            <!-- Wizard Avatar & Title -->
+            <!-- Wizard Avatar & Title (Draggable Area) -->
             <LinearLayout
+                android:id="@+id/layoutHeaderDrag"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:orientation="vertical"
                 android:gravity="center"
-                android:layout_marginTop="4dp"
-                android:layout_marginBottom="8dp">
+                android:layout_marginTop="2dp"
+                android:layout_marginBottom="6dp">
 
                 <TextView
-                    android:layout_width="38dp"
-                    android:layout_height="38dp"
+                    android:layout_width="34dp"
+                    android:layout_height="34dp"
                     android:text="🎯"
-                    android:textSize="22sp"
+                    android:textSize="20sp"
                     android:gravity="center"
                     android:background="@drawable/bg_floating_circle" />
 
@@ -66,7 +68,7 @@
                     android:textColor="#F8FAFC"
                     android:textStyle="bold"
                     android:textSize="12sp"
-                    android:layout_marginTop="3dp" />
+                    android:layout_marginTop="2dp" />
             </LinearLayout>
 
             <View
@@ -75,13 +77,14 @@
                 android:background="#1E3A5F"
                 android:layout_marginBottom="6dp" />
 
-            <!-- Tab 1: Visuals -->
+            <!-- Tab 1: Visuals (ACTIVE BY DEFAULT for easy calibration!) -->
             <LinearLayout
                 android:id="@+id/btnTabVisuals"
                 android:layout_width="match_parent"
                 android:layout_height="32dp"
                 android:orientation="horizontal"
                 android:gravity="center_vertical"
+                android:background="@drawable/bg_tab_active"
                 android:paddingStart="8dp"
                 android:paddingEnd="8dp"
                 android:layout_marginBottom="4dp">
@@ -97,20 +100,19 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:text="Visuals"
-                    android:textColor="#94A3B8"
-                    android:textSize="12sp"
+                    android:textColor="#38BDF8"
+                    android:textSize="11sp"
                     android:textStyle="bold"
                     android:layout_marginStart="8dp" />
             </LinearLayout>
 
-            <!-- Tab 2: Aim Menu (Active by default) -->
+            <!-- Tab 2: Aim Menu -->
             <LinearLayout
                 android:id="@+id/btnTabAimMenu"
                 android:layout_width="match_parent"
                 android:layout_height="32dp"
                 android:orientation="horizontal"
                 android:gravity="center_vertical"
-                android:background="@drawable/bg_tab_active"
                 android:paddingStart="8dp"
                 android:paddingEnd="8dp"
                 android:layout_marginBottom="4dp">
@@ -126,8 +128,8 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:text="Aim Menu"
-                    android:textColor="#38BDF8"
-                    android:textSize="12sp"
+                    android:textColor="#94A3B8"
+                    android:textSize="11sp"
                     android:textStyle="bold"
                     android:layout_marginStart="8dp" />
             </LinearLayout>
@@ -155,7 +157,7 @@
                     android:layout_height="wrap_content"
                     android:text="Settings"
                     android:textColor="#94A3B8"
-                    android:textSize="12sp"
+                    android:textSize="11sp"
                     android:textStyle="bold"
                     android:layout_marginStart="8dp" />
             </LinearLayout>
@@ -174,7 +176,7 @@
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="v2.0"
+                    android:text="v2.5"
                     android:textColor="#64748B"
                     android:textSize="10sp"
                     android:layout_alignParentStart="true"
@@ -186,7 +188,7 @@
                     android:layout_height="wrap_content"
                     android:text="➖"
                     android:textColor="#94A3B8"
-                    android:textSize="14sp"
+                    android:textSize="16sp"
                     android:padding="2dp"
                     android:layout_alignParentEnd="true"
                     android:layout_centerVertical="true" />
@@ -207,8 +209,8 @@
             android:layout_height="match_parent"
             android:layout_weight="1"
             android:orientation="vertical"
-            android:paddingStart="12dp"
-            android:paddingEnd="8dp">
+            android:paddingStart="10dp"
+            android:paddingEnd="6dp">
 
             <!-- Tab Header: Tab Title Badge -->
             <LinearLayout
@@ -216,16 +218,15 @@
                 android:layout_height="wrap_content"
                 android:orientation="horizontal"
                 android:gravity="center_vertical"
-                android:layout_marginBottom="6dp"
-                android:layout_marginTop="2dp">
+                android:layout_marginBottom="4dp">
 
                 <TextView
                     android:id="@+id/tvCurrentTabTitle"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="Aim"
+                    android:text="Visuals"
                     android:textColor="#FFFFFF"
-                    android:textSize="11sp"
+                    android:textSize="10sp"
                     android:textStyle="bold"
                     android:background="@drawable/bg_chip_blue"
                     android:paddingStart="8dp"
@@ -244,173 +245,32 @@
             <ScrollView
                 android:layout_width="match_parent"
                 android:layout_height="match_parent"
-                android:scrollbars="none">
+                android:scrollbars="none"
+                android:fillViewport="true">
 
                 <FrameLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content">
 
-                    <!-- PANE 1: AIM MENU (Exact controls from user's image) -->
-                    <LinearLayout
-                        android:id="@+id/layoutContentAim"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:orientation="vertical"
-                        android:visibility="visible">
-
-                        <!-- Row 1: Auto Aim(*) -->
-                        <RelativeLayout
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:layout_marginBottom="4dp">
-
-                            <TextView
-                                android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
-                                android:text="Auto Aim(*)"
-                                android:textColor="#F8FAFC"
-                                android:textSize="12sp"
-                                android:layout_alignParentStart="true"
-                                android:layout_centerVertical="true" />
-
-                            <androidx.appcompat.widget.SwitchCompat
-                                android:id="@+id/switchAutoAim"
-                                android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
-                                android:checked="true"
-                                android:layout_alignParentEnd="true"
-                                android:layout_centerVertical="true" />
-                        </RelativeLayout>
-
-                        <!-- Row 2: Auto Aim Toggle Icon -->
-                        <RelativeLayout
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:layout_marginBottom="4dp">
-
-                            <TextView
-                                android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
-                                android:text="Auto Aim Toggle Icon"
-                                android:textColor="#F8FAFC"
-                                android:textSize="12sp"
-                                android:layout_alignParentStart="true"
-                                android:layout_centerVertical="true" />
-
-                            <androidx.appcompat.widget.SwitchCompat
-                                android:id="@+id/switchAimToggleIcon"
-                                android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
-                                android:checked="true"
-                                android:layout_alignParentEnd="true"
-                                android:layout_centerVertical="true" />
-                        </RelativeLayout>
-
-                        <!-- Row 3: Auto Play -->
-                        <RelativeLayout
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:layout_marginBottom="4dp">
-
-                            <TextView
-                                android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
-                                android:text="Auto Play"
-                                android:textColor="#F8FAFC"
-                                android:textSize="12sp"
-                                android:layout_alignParentStart="true"
-                                android:layout_centerVertical="true" />
-
-                            <androidx.appcompat.widget.SwitchCompat
-                                android:id="@+id/switchAutoPlay"
-                                android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
-                                android:checked="true"
-                                android:layout_alignParentEnd="true"
-                                android:layout_centerVertical="true" />
-                        </RelativeLayout>
-
-                        <!-- Row 4: Nominate Pocket Manual -->
-                        <RelativeLayout
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:layout_marginBottom="6dp">
-
-                            <TextView
-                                android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
-                                android:text="Nominate Pocket Manual"
-                                android:textColor="#F8FAFC"
-                                android:textSize="12sp"
-                                android:layout_alignParentStart="true"
-                                android:layout_centerVertical="true" />
-
-                            <androidx.appcompat.widget.SwitchCompat
-                                android:id="@+id/switchNominatePocket"
-                                android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
-                                android:checked="false"
-                                android:layout_alignParentEnd="true"
-                                android:layout_centerVertical="true" />
-                        </RelativeLayout>
-
-                        <!-- Row 5: Aim Max Power (Text + Value + Slider) -->
-                        <LinearLayout
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:orientation="vertical">
-
-                            <RelativeLayout
-                                android:layout_width="match_parent"
-                                android:layout_height="wrap_content"
-                                android:layout_marginBottom="2dp">
-
-                                <TextView
-                                    android:layout_width="wrap_content"
-                                    android:layout_height="wrap_content"
-                                    android:text="Aim Max Power"
-                                    android:textColor="#F8FAFC"
-                                    android:textSize="12sp"
-                                    android:layout_alignParentStart="true" />
-
-                                <TextView
-                                    android:id="@+id/tvAimPowerVal"
-                                    android:layout_width="wrap_content"
-                                    android:layout_height="wrap_content"
-                                    android:text="1.00"
-                                    android:textColor="#38BDF8"
-                                    android:textSize="12sp"
-                                    android:textStyle="bold"
-                                    android:layout_alignParentEnd="true" />
-                            </RelativeLayout>
-
-                            <SeekBar
-                                android:id="@+id/seekAimPower"
-                                android:layout_width="match_parent"
-                                android:layout_height="wrap_content"
-                                android:max="100"
-                                android:progress="85" />
-                        </LinearLayout>
-                    </LinearLayout>
-
-                    <!-- PANE 2: VISUALS (Manual Table & Pocket Scaling as requested!) -->
+                    <!-- ============================================== -->
+                    <!-- PANE 1: VISUALS (TABLE & POCKET CONTROLS)      -->
+                    <!-- ============================================== -->
                     <LinearLayout
                         android:id="@+id/layoutContentVisuals"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:orientation="vertical"
-                        android:visibility="gone">
+                        android:visibility="visible">
 
                         <!-- Manual Table Zoom -->
                         <RelativeLayout
                             android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:layout_marginBottom="2dp">
+                            android:layout_height="wrap_content">
 
                             <TextView
                                 android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
-                                android:text="📐 تصغير/تكبير الطاولة (Table Zoom)"
+                                android:text="📐 حجم الطاولة (Table Zoom)"
                                 android:textColor="#F8FAFC"
                                 android:textSize="11sp"
                                 android:layout_alignParentStart="true" />
@@ -432,18 +292,17 @@
                             android:layout_height="wrap_content"
                             android:max="135"
                             android:progress="65"
-                            android:layout_marginBottom="6dp" />
+                            android:layout_marginBottom="4dp" />
 
                         <!-- Manual Pocket Size Scaling -->
                         <RelativeLayout
                             android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:layout_marginBottom="2dp">
+                            android:layout_height="wrap_content">
 
                             <TextView
                                 android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
-                                android:text="🕳️ تصغير/تكبير الحفر (Pocket Size)"
+                                android:text="🕳️ حجم الثقوب (Pocket Size)"
                                 android:textColor="#F8FAFC"
                                 android:textSize="11sp"
                                 android:layout_alignParentStart="true" />
@@ -465,42 +324,95 @@
                             android:layout_height="wrap_content"
                             android:max="210"
                             android:progress="60"
-                            android:layout_marginBottom="6dp" />
+                            android:layout_marginBottom="4dp" />
 
-                        <!-- Table Cushions Toggle -->
-                        <RelativeLayout
+                        <!-- Table Position D-Pad: Move Table Left / Up / Down / Right -->
+                        <LinearLayout
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
+                            android:orientation="horizontal"
+                            android:gravity="center_vertical"
                             android:layout_marginBottom="4dp">
 
                             <TextView
                                 android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
-                                android:text="إظهار حواف وجدران الارتداد"
-                                android:textColor="#F8FAFC"
-                                android:textSize="11sp"
-                                android:layout_alignParentStart="true"
-                                android:layout_centerVertical="true" />
+                                android:text="🎮 موضع الطاولة:"
+                                android:textColor="#94A3B8"
+                                android:textSize="10sp"
+                                android:layout_marginEnd="4dp" />
 
-                            <androidx.appcompat.widget.SwitchCompat
-                                android:id="@+id/switchShowCushions"
+                            <TextView
+                                android:id="@+id/btnCalibLeft"
+                                android:layout_width="28dp"
+                                android:layout_height="24dp"
+                                android:text="⬅️"
+                                android:gravity="center"
+                                android:background="#1E293B"
+                                android:layout_marginEnd="3dp" />
+
+                            <TextView
+                                android:id="@+id/btnCalibUp"
+                                android:layout_width="28dp"
+                                android:layout_height="24dp"
+                                android:text="⬆️"
+                                android:gravity="center"
+                                android:background="#1E293B"
+                                android:layout_marginEnd="3dp" />
+
+                            <TextView
+                                android:id="@+id/btnCalibDown"
+                                android:layout_width="28dp"
+                                android:layout_height="24dp"
+                                android:text="⬇️"
+                                android:gravity="center"
+                                android:background="#1E293B"
+                                android:layout_marginEnd="3dp" />
+
+                            <TextView
+                                android:id="@+id/btnCalibRight"
+                                android:layout_width="28dp"
+                                android:layout_height="24dp"
+                                android:text="➡️"
+                                android:gravity="center"
+                                android:background="#1E293B"
+                                android:layout_marginEnd="4dp" />
+
+                            <TextView
+                                android:id="@+id/btnResetCalib"
                                 android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
-                                android:checked="true"
-                                android:layout_alignParentEnd="true"
-                                android:layout_centerVertical="true" />
-                        </RelativeLayout>
+                                android:layout_height="24dp"
+                                android:text="ضبط"
+                                android:textColor="#F87171"
+                                android:textSize="10sp"
+                                android:gravity="center"
+                                android:background="#1E293B"
+                                android:paddingStart="4dp"
+                                android:paddingEnd="4dp" />
+                        </LinearLayout>
 
-                        <!-- Master Lines Toggle -->
+                        <!-- Auto-Fit DPI / Resolution Button -->
+                        <TextView
+                            android:id="@+id/btnAutoFitDpi"
+                            android:layout_width="match_parent"
+                            android:layout_height="26dp"
+                            android:text="🎯 ضبط تلقائي للشاشة (Auto-Fit DPI)"
+                            android:textColor="#38BDF8"
+                            android:textSize="10sp"
+                            android:textStyle="bold"
+                            android:gravity="center"
+                            android:background="#0F172A"
+                            android:layout_marginBottom="4dp" />
+
+                        <!-- Master Laser Lines Toggle -->
                         <RelativeLayout
                             android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:layout_marginBottom="4dp">
+                            android:layout_height="wrap_content">
 
                             <TextView
                                 android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
-                                android:text="إظهار خطوط التصويب والليزر"
+                                android:text="خطوط التصويب والليزر"
                                 android:textColor="#F8FAFC"
                                 android:textSize="11sp"
                                 android:layout_alignParentStart="true"
@@ -514,32 +426,58 @@
                                 android:layout_alignParentEnd="true"
                                 android:layout_centerVertical="true" />
                         </RelativeLayout>
-                    </LinearLayout>
 
-                    <!-- PANE 3: SETTINGS -->
-                    <LinearLayout
-                        android:id="@+id/layoutContentSettings"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:orientation="vertical"
-                        android:visibility="gone">
-
+                        <!-- Table Cushions Toggle -->
                         <RelativeLayout
                             android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:layout_marginBottom="4dp">
+                            android:layout_height="wrap_content">
 
                             <TextView
                                 android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
-                                android:text="ارتدادات الجدران (4 Banks)"
+                                android:text="إظهار حواف وجدران الطاولة"
                                 android:textColor="#F8FAFC"
                                 android:textSize="11sp"
                                 android:layout_alignParentStart="true"
                                 android:layout_centerVertical="true" />
 
                             <androidx.appcompat.widget.SwitchCompat
-                                android:id="@+id/switchBankShots"
+                                android:id="@+id/switchShowCushions"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:checked="true"
+                                android:layout_alignParentEnd="true"
+                                android:layout_centerVertical="true" />
+                        </RelativeLayout>
+                    </LinearLayout>
+
+                    <!-- ============================================== -->
+                    <!-- PANE 2: AIM MENU CONTROLS                      -->
+                    <!-- ============================================== -->
+                    <LinearLayout
+                        android:id="@+id/layoutContentAim"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical"
+                        android:visibility="gone">
+
+                        <!-- Row 1: Auto Aim(*) -->
+                        <RelativeLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginBottom="2dp">
+
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="Auto Aim(*)"
+                                android:textColor="#F8FAFC"
+                                android:textSize="11sp"
+                                android:layout_alignParentStart="true"
+                                android:layout_centerVertical="true" />
+
+                            <androidx.appcompat.widget.SwitchCompat
+                                android:id="@+id/switchAutoAim"
                                 android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
                                 android:checked="true"
@@ -547,10 +485,11 @@
                                 android:layout_centerVertical="true" />
                         </RelativeLayout>
 
+                        <!-- Row 2: Cue Ball Path -->
                         <RelativeLayout
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
-                            android:layout_marginBottom="4dp">
+                            android:layout_marginBottom="2dp">
 
                             <TextView
                                 android:layout_width="wrap_content"
@@ -570,71 +509,95 @@
                                 android:layout_centerVertical="true" />
                         </RelativeLayout>
 
-                        <!-- Calibration Offset D-Pad -->
+                        <!-- Row 3: Bank Shots -->
+                        <RelativeLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginBottom="2dp">
+
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="ارتدادات الجدران (Bank Shots)"
+                                android:textColor="#F8FAFC"
+                                android:textSize="11sp"
+                                android:layout_alignParentStart="true"
+                                android:layout_centerVertical="true" />
+
+                            <androidx.appcompat.widget.SwitchCompat
+                                android:id="@+id/switchBankShots"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:checked="true"
+                                android:layout_alignParentEnd="true"
+                                android:layout_centerVertical="true" />
+                        </RelativeLayout>
+
+                        <!-- Row 4: Aim Max Power (Text + Slider) -->
                         <LinearLayout
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
-                            android:orientation="horizontal"
-                            android:gravity="center"
-                            android:layout_marginTop="4dp"
-                            android:layout_marginBottom="6dp">
+                            android:orientation="vertical"
+                            android:layout_marginTop="2dp">
 
-                            <TextView
-                                android:id="@+id/btnCalibLeft"
-                                android:layout_width="36dp"
-                                android:layout_height="28dp"
-                                android:text="⬅️"
-                                android:gravity="center"
-                                android:background="#1E293B"
-                                android:layout_marginEnd="6dp" />
+                            <RelativeLayout
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content">
 
-                            <TextView
-                                android:id="@+id/btnCalibUp"
-                                android:layout_width="36dp"
-                                android:layout_height="28dp"
-                                android:text="⬆️"
-                                android:gravity="center"
-                                android:background="#1E293B"
-                                android:layout_marginEnd="6dp" />
+                                <TextView
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:text="قوة الضربة (Aim Max Power)"
+                                    android:textColor="#F8FAFC"
+                                    android:textSize="11sp"
+                                    android:layout_alignParentStart="true" />
 
-                            <TextView
-                                android:id="@+id/btnCalibDown"
-                                android:layout_width="36dp"
-                                android:layout_height="28dp"
-                                android:text="⬇️"
-                                android:gravity="center"
-                                android:background="#1E293B"
-                                android:layout_marginEnd="6dp" />
+                                <TextView
+                                    android:id="@+id/tvAimPowerVal"
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:text="1.00"
+                                    android:textColor="#38BDF8"
+                                    android:textSize="11sp"
+                                    android:textStyle="bold"
+                                    android:layout_alignParentEnd="true" />
+                            </RelativeLayout>
 
-                            <TextView
-                                android:id="@+id/btnCalibRight"
-                                android:layout_width="36dp"
-                                android:layout_height="28dp"
-                                android:text="➡️"
-                                android:gravity="center"
-                                android:background="#1E293B"
-                                android:layout_marginEnd="6dp" />
-
-                            <TextView
-                                android:id="@+id/btnResetCalib"
-                                android:layout_width="wrap_content"
-                                android:layout_height="28dp"
-                                android:text="إعادة ضبط"
-                                android:textColor="#F87171"
-                                android:textSize="10sp"
-                                android:paddingStart="8dp"
-                                android:paddingEnd="8dp"
-                                android:gravity="center"
-                                android:background="#1E293B" />
+                            <SeekBar
+                                android:id="@+id/seekAimPower"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:max="100"
+                                android:progress="85" />
                         </LinearLayout>
+                    </LinearLayout>
+
+                    <!-- ============================================== -->
+                    <!-- PANE 3: SETTINGS & EXIT                        -->
+                    <!-- ============================================== -->
+                    <LinearLayout
+                        android:id="@+id/layoutContentSettings"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical"
+                        android:visibility="gone">
+
+                        <TextView
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:text="💡 قم بهز الهاتف في أي وقت لإخفاء أو إظهار هذه القائمة أثناء اللعب دون التأثير على خطوط التصويب."
+                            android:textColor="#94A3B8"
+                            android:textSize="10sp"
+                            android:layout_marginBottom="12dp" />
 
                         <TextView
                             android:id="@+id/btnCloseMod"
                             android:layout_width="match_parent"
-                            android:layout_height="30dp"
-                            android:text="❌ إغلاق التطبيق بالكامل"
+                            android:layout_height="34dp"
+                            android:text="❌ إغلاق التطبيق وإيقاف التتبع"
                             android:textColor="#EF4444"
                             android:textSize="11sp"
+                            android:textStyle="bold"
                             android:gravity="center"
                             android:background="#1E293B" />
                     </LinearLayout>
