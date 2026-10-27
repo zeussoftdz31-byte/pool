@@ -26,6 +26,8 @@ echo ======================================================================
 set /p USER_TOKEN="الـ Token: "
 
 if not "%USER_TOKEN%"=="" (
+    set "USER_TOKEN=%USER_TOKEN: =%"
+    set "USER_TOKEN=%USER_TOKEN:"=%"
     echo.
     echo [+] جاري ضبط الـ Token في إعدادات Git...
     git remote set-url origin https://%USER_TOKEN%@github.com/zeussoftdz31-byte/pool.git
