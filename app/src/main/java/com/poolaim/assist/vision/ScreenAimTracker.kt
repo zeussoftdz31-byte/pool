@@ -305,13 +305,26 @@ class ScreenAimTracker(
             return (abs(r - feltR) + abs(g - feltG) + abs(b - feltB)) < 55
         }
 
-        fun isCueBallColor(r: Int, g: Int, b: Int): Boolean {
+        fun isPureCueBallWhite(r: Int, g: Int, b: Int): Boolean {
             val lum = (r * 77 + g * 150 + b * 29) shr 8
             val maxC = maxOf(r, maxOf(g, b))
             val minC = minOf(r, minOf(g, b))
             val satDiff = maxC - minC
-            // Cue ball is much brighter than felt, has high luminance, and low color saturation
-            return (lum >= 170 && (lum - feltLum) > 22 && satDiff < 68) || (lum >= 225 && satDiff < 50)
+            // Cue ball is neutral white (low saturation) and bright compared to table felt
+            return (lum >= 175 && (lum - feltLum) > 20 && satDiff <= 28) || (lum >= 215 && satDiff <= 32)
+        }
+
+        fun isColoredBallPixel(r: Int, g: Int, b: Int): Boolean {
+            if (isFelt(r, g, b)) return false
+            val maxC = maxOf(r, maxOf(g, b))
+            val minC = minOf(r, minOf(g, b))
+            return (maxC - minC) >= 32
+        }
+
+        fun isDarkBallPixel(r: Int, g: Int, b: Int): Boolean {
+            if (isFelt(r, g, b)) return false
+            val lum = (r * 77 + g * 150 + b * 29) shr 8
+            return lum < 65
         }
 
         fun isWhiteLineColor(r: Int, g: Int, b: Int): Boolean {
@@ -419,8 +432,119 @@ class ScreenAimTracker(
         }
 
         // =========================================================================
-        // STEP 2: LOCATE CUE BALL (WHITE BALL)
+        // STEP 2: BULLETPROOF CUE BALL LOCATOR & DISCRIMINATOR
         // =========================================================================
+        // Rigorously rejects:
+        // 1. Specular light glares & glossy ball reflections (Mass < 16 threshold)
+        // 2. Striped balls 9-15 (Colored stripe contamination < 3 threshold)
+        // 3. Off-center white caps of striped balls (360° Ring Whiteness >= 11/16)
+        // 4. Confirms true cue ball by checking for cue stick shaft (+1500 bonus)
+        fun evaluateCueBallCandidate(cx: Float, cy: Float): Float {
+            val icx = cx.toInt()
+            val icy = cy.toInt()
+            val rDisc = (ballRadiusEst * 0.85f).toInt()
+            if (icx - rDisc < tableStartX || icx + rDisc > tableEndX ||
+                icy - rDisc < tableStartY || icy + rDisc > tableEndY
+            ) {
+                return -1f
+            }
+
+            var whitePixels = 0
+            var coloredPixels = 0
+            var darkPixels = 0
+
+            for (dy in -rDisc..rDisc step 2) {
+                for (dx in -rDisc..rDisc step 2) {
+                    if (dx * dx + dy * dy <= rDisc * rDisc) {
+                        val px = icx + dx
+                        val py = icy + dy
+                        val c = getPixelPacked(buffer, px, py, rowStride, pixelStride, width, height)
+                        val r = (c shr 16) and 0xFF
+                        val g = (c shr 8) and 0xFF
+                        val b = c and 0xFF
+
+                        if (isPureCueBallWhite(r, g, b)) {
+                            whitePixels++
+                        } else if (isColoredBallPixel(r, g, b)) {
+                            coloredPixels++
+                        } else if (isDarkBallPixel(r, g, b)) {
+                            darkPixels++
+                        }
+                    }
+                }
+            }
+
+            // Test 1: Minimum pure white mass (Rejects specular highlights / glares / reflections)
+            if (whitePixels < 16) {
+                return -1f
+            }
+
+            // Test 2: Zero colored stripe contamination (Rejects striped balls 9-15)
+            if (coloredPixels >= 3) {
+                return -1f
+            }
+
+            // Test 3: 360° Circular Ring Uniformity at 0.55 * R
+            val ringR = ballRadiusEst * 0.55f
+            var ringWhiteCount = 0
+            var ringColoredCount = 0
+            val ringSteps = 16
+            for (step in 0 until ringSteps) {
+                val ang = (step * 2.0 * Math.PI / ringSteps).toFloat()
+                val rx = (cx + ringR * cos(ang.toDouble()).toFloat()).toInt()
+                val ry = (cy + ringR * sin(ang.toDouble()).toFloat()).toInt()
+                val rc = getPixelPacked(buffer, rx, ry, rowStride, pixelStride, width, height)
+                val rr = (rc shr 16) and 0xFF
+                val rg = (rc shr 8) and 0xFF
+                val rb = rc and 0xFF
+
+                if (isPureCueBallWhite(rr, rg, rb)) {
+                    ringWhiteCount++
+                } else if (isColoredBallPixel(rr, rg, rb)) {
+                    ringColoredCount++
+                }
+            }
+
+            // Ring must be predominantly pure white and have zero/minimal colored stripe hits
+            if (ringColoredCount >= 2 || ringWhiteCount < 11) {
+                return -1f
+            }
+
+            // Base score based on white pixel count and ring uniformity
+            var score = (whitePixels * 10f) + (ringWhiteCount * 25f) - (coloredPixels * 50f)
+
+            // Test 4: In-Game Cue Stick Verification Behind Ball (Bonus score)
+            // In 8 Ball Pool, the cue stick is ONLY positioned behind the true cue ball!
+            var maxStickBehind = 0
+            for (d in 0 until 16) {
+                val theta = (d * 2.0 * Math.PI / 16).toFloat()
+                val cosT = cos(theta.toDouble()).toFloat()
+                val sinT = sin(theta.toDouble()).toFloat()
+                var stickCount = 0
+                for (s in 2..6) {
+                    val dist = ballRadiusEst * (1.6f + s * 0.8f)
+                    val bx = (cx - dist * cosT).toInt()
+                    val by = (cy - dist * sinT).toInt()
+                    if (bx in tableStartX..tableEndX && by in tableStartY..tableEndY) {
+                        val bc = getPixelPacked(buffer, bx, by, rowStride, pixelStride, width, height)
+                        val br = (bc shr 16) and 0xFF
+                        val bg = (bc shr 8) and 0xFF
+                        val bb = bc and 0xFF
+                        if (!isFelt(br, bg, bb)) {
+                            stickCount++
+                        }
+                    }
+                }
+                if (stickCount > maxStickBehind) maxStickBehind = stickCount
+            }
+
+            if (maxStickBehind >= 3) {
+                score += 1500f
+            }
+
+            return score
+        }
+
         var detectedCueX = -1f
         var detectedCueY = -1f
 
@@ -443,7 +567,7 @@ class ScreenAimTracker(
                     val r = (c shr 16) and 0xFF
                     val g = (c shr 8) and 0xFF
                     val b = c and 0xFF
-                    if (isCueBallColor(r, g, b)) {
+                    if (isPureCueBallWhite(r, g, b)) {
                         val lum = (r * 77 + g * 150 + b * 29) shr 8
                         val weight = (lum - 150).coerceAtLeast(1).toFloat()
                         sumX += x * weight
@@ -454,18 +578,31 @@ class ScreenAimTracker(
             }
 
             if (totalWeight > 35f) {
-                detectedCueX = sumX / totalWeight
-                detectedCueY = sumY / totalWeight
-                lockedCueX = detectedCueX
-                lockedCueY = detectedCueY
-                lostFrames = 0
+                val candidateX = sumX / totalWeight
+                val candidateY = sumY / totalWeight
+                val candScore = evaluateCueBallCandidate(candidateX, candidateY)
+                if (candScore > 0f) {
+                    detectedCueX = candidateX
+                    detectedCueY = candidateY
+                    lockedCueX = detectedCueX
+                    lockedCueY = detectedCueY
+                    lostFrames = 0
+                } else {
+                    // Ball failed verification! Clear lock immediately to prevent latching onto impostors
+                    isLockedOnCue = false
+                    lockedCueX = -1f
+                    lockedCueY = -1f
+                    lostFrames = 0
+                }
             } else {
                 lostFrames++
-                if (lostFrames < 12) {
+                if (lostFrames < 6) {
                     detectedCueX = lockedCueX
                     detectedCueY = lockedCueY
                 } else {
                     isLockedOnCue = false
+                    lockedCueX = -1f
+                    lockedCueY = -1f
                     lostFrames = 0
                 }
             }
@@ -473,52 +610,51 @@ class ScreenAimTracker(
 
         // Slow Path: Scan table to find cue ball
         if (detectedCueX < 0f) {
-            var bestBallWeight = 0f
+            var bestScore = -1f
             var bestBx = -1f
             var bestBy = -1f
 
-            val scanStep = 3
-            for (y in tableStartY until tableEndY step scanStep) {
-                for (x in tableStartX until tableEndX step scanStep) {
+            val scanStep = 4
+            for (y in (tableStartY + ballRadiusEst.toInt()) until (tableEndY - ballRadiusEst.toInt()) step scanStep) {
+                for (x in (tableStartX + ballRadiusEst.toInt()) until (tableEndX - ballRadiusEst.toInt()) step scanStep) {
                     val c = getPixelPacked(buffer, x, y, rowStride, pixelStride, width, height)
                     val r = (c shr 16) and 0xFF
                     val g = (c shr 8) and 0xFF
                     val b = c and 0xFF
 
-                    if (isCueBallColor(r, g, b)) {
-                        var sumX = 0f
-                        var sumY = 0f
-                        var count = 0
-                        var totalW = 0f
-                        val rInt = (ballRadiusEst * 1.15f).toInt()
-
-                        for (cy in (y - rInt)..(y + rInt) step 2) {
-                            for (cx in (x - rInt)..(x + rInt) step 2) {
-                                val cSub = getPixelPacked(buffer, cx, cy, rowStride, pixelStride, width, height)
-                                val subR = (cSub shr 16) and 0xFF
-                                val subG = (cSub shr 8) and 0xFF
-                                val subB = cSub and 0xFF
-                                if (isCueBallColor(subR, subG, subB)) {
-                                    val lum = (subR * 77 + subG * 150 + subB * 29) shr 8
-                                    val w = (lum - 150).coerceAtLeast(1).toFloat()
-                                    sumX += cx * w
-                                    sumY += cy * w
-                                    totalW += w
-                                    count++
+                    if (isPureCueBallWhite(r, g, b)) {
+                        val score = evaluateCueBallCandidate(x.toFloat(), y.toFloat())
+                        if (score > bestScore) {
+                            var sumX = 0f
+                            var sumY = 0f
+                            var totalW = 0f
+                            val rInt = (ballRadiusEst * 0.9f).toInt()
+                            for (cy in (y - rInt)..(y + rInt) step 2) {
+                                for (cx in (x - rInt)..(x + rInt) step 2) {
+                                    val sc = getPixelPacked(buffer, cx, cy, rowStride, pixelStride, width, height)
+                                    val sr = (sc shr 16) and 0xFF
+                                    val sg = (sc shr 8) and 0xFF
+                                    val sb = sc and 0xFF
+                                    if (isPureCueBallWhite(sr, sg, sb)) {
+                                        val lum = (sr * 77 + sg * 150 + sb * 29) shr 8
+                                        val w = (lum - 150).coerceAtLeast(1).toFloat()
+                                        sumX += cx * w
+                                        sumY += cy * w
+                                        totalW += w
+                                    }
                                 }
                             }
-                        }
-
-                        if (count in 14..220 && totalW > bestBallWeight) {
-                            bestBallWeight = totalW
-                            bestBx = sumX / totalW
-                            bestBy = sumY / totalW
+                            if (totalW > 20f) {
+                                bestScore = score
+                                bestBx = sumX / totalW
+                                bestBy = sumY / totalW
+                            }
                         }
                     }
                 }
             }
 
-            if (bestBx > 0f && bestBy > 0f) {
+            if (bestBx > 0f && bestBy > 0f && bestScore > 0f) {
                 detectedCueX = bestBx
                 detectedCueY = bestBy
                 lockedCueX = detectedCueX
@@ -553,7 +689,8 @@ class ScreenAimTracker(
                 val g = (c shr 8) and 0xFF
                 val b = c and 0xFF
 
-                if (!isFelt(r, g, b) && !isCueBallColor(r, g, b)) {
+                val isBallPixel = !isFelt(r, g, b) && (!isPureCueBallWhite(r, g, b) || isColoredBallPixel(r, g, b))
+                if (isBallPixel) {
                     val dCueSq = (x - detectedCueX) * (x - detectedCueX) + (y - detectedCueY) * (y - detectedCueY)
                     if (dCueSq > minBallDistSq) {
                         var isCloseToExisting = false
