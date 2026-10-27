@@ -143,10 +143,9 @@ class AimCanvasView(context: Context) : View(context) {
     }
 
     private val cushionBorderPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = Color.parseColor("#AA00E5FF") // Glowing Laser Cyan Cushions
+        color = Color.parseColor("#FF1744") // Vivid Neon Red Cushion Outline matching user drawing
         style = Paint.Style.STROKE
-        strokeWidth = 3f
-        pathEffect = DashPathEffect(floatArrayOf(16f, 8f), 0f)
+        strokeWidth = 3.5f
     }
 
     private val pocketGuidePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
@@ -168,21 +167,21 @@ class AimCanvasView(context: Context) : View(context) {
         style = Paint.Style.FILL
     }
 
-    // Interactive Calibration Paints
+    // Interactive Calibration Paints (Matching user red diagram)
     private val calibBorderPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = Color.parseColor("#00E5FF") // Laser cyan
+        color = Color.parseColor("#FF1744") // Vivid Neon Red
         strokeWidth = 4.5f
         style = Paint.Style.STROKE
     }
 
     private val calibPocketPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = Color.parseColor("#FFD600") // Laser gold
+        color = Color.parseColor("#FF1744") // Vivid Neon Red
         strokeWidth = 4f
         style = Paint.Style.STROKE
     }
 
     private val calibPocketFillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = Color.parseColor("#44FFD600")
+        color = Color.parseColor("#33FF1744") // Translucent red
         style = Paint.Style.FILL
     }
 
@@ -195,7 +194,7 @@ class AimCanvasView(context: Context) : View(context) {
     }
 
     private val calibSubTextPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = Color.parseColor("#00E5FF")
+        color = Color.parseColor("#FF5252")
         textSize = 20f
         textAlign = Paint.Align.CENTER
         setShadowLayer(4f, 0f, 0f, Color.BLACK)
@@ -209,6 +208,7 @@ class AimCanvasView(context: Context) : View(context) {
     var tableScaleY = 1.0f
     var pocketScale = 1.0f
     var showTableCushions = true
+    var isUserCalibrationSaved = false
 
     private var viewWidth = 0
     private var viewHeight = 0
@@ -217,7 +217,7 @@ class AimCanvasView(context: Context) : View(context) {
         loadCalibration()
     }
 
-    private fun loadCalibration() {
+    fun loadCalibration() {
         try {
             val prefs = context.getSharedPreferences("pool_wizard_calibration", Context.MODE_PRIVATE)
             offsetX = prefs.getFloat("offset_x", 0f)
@@ -227,13 +227,17 @@ class AimCanvasView(context: Context) : View(context) {
             tableScaleY = prefs.getFloat("scale_y", 1.0f)
             pocketScale = prefs.getFloat("pocket_scale", 1.0f)
             showTableCushions = prefs.getBoolean("show_cushions", true)
+            isUserCalibrationSaved = prefs.getBoolean("user_calibration_saved", false)
         } catch (e: Exception) {
             e.printStackTrace()
         }
     }
 
-    fun saveCalibration() {
+    fun saveCalibration(markAsUserSaved: Boolean = false) {
         try {
+            if (markAsUserSaved) {
+                isUserCalibrationSaved = true
+            }
             val prefs = context.getSharedPreferences("pool_wizard_calibration", Context.MODE_PRIVATE)
             prefs.edit()
                 .putFloat("offset_x", offsetX)
@@ -243,6 +247,7 @@ class AimCanvasView(context: Context) : View(context) {
                 .putFloat("scale_y", tableScaleY)
                 .putFloat("pocket_scale", pocketScale)
                 .putBoolean("show_cushions", showTableCushions)
+                .putBoolean("user_calibration_saved", isUserCalibrationSaved)
                 .apply()
         } catch (e: Exception) {
             e.printStackTrace()
@@ -332,7 +337,10 @@ class AimCanvasView(context: Context) : View(context) {
         tableScaleY = 1.0f
         pocketScale = 1.0f
         showTableCushions = true
-        saveCalibration()
+        isUserCalibrationSaved = false
+        val prefs = context.getSharedPreferences("pool_wizard_calibration", Context.MODE_PRIVATE)
+        prefs.edit().putBoolean("user_calibration_saved", false).apply()
+        saveCalibration(markAsUserSaved = false)
         if (viewWidth > 0 && viewHeight > 0) {
             recalculateTableBounds(viewWidth, viewHeight)
         }
@@ -370,8 +378,6 @@ class AimCanvasView(context: Context) : View(context) {
         val screenW = w.toFloat()
         val screenH = h.toFloat()
 
-        // In landscape (8 Ball Pool game mode): table height occupies ~75% of screen height (2:1 aspect ratio)
-        // In portrait (testing/launcher mode): table width occupies ~92% of screen width (2:1 aspect ratio)
         val (baseTableW, baseTableH) = if (isLandscape) {
             val th = screenH * 0.75f
             Pair(th * 2.0f, th)
@@ -383,17 +389,13 @@ class AimCanvasView(context: Context) : View(context) {
         val tableW = baseTableW * tableScaleX * tableZoom
         val tableH = baseTableH * tableScaleY * tableZoom
 
-        // Horizontally and vertically centered across the physical display with offset calibration
         val tableLeft = (screenW - tableW) / 2f + offsetX
         val tableRight = tableLeft + tableW
         val tableTop = (screenH - tableH) / 2f + offsetY
         val tableBottom = tableTop + tableH
 
         tableBounds.set(tableLeft, tableTop, tableRight, tableBottom)
-
-        // Exact physical ball radius: in 8 Ball Pool, 16.5 balls fit vertically (radius = tableH / 33.0)
         ballRadius = tableH / 33.0f
-
         updatePockets()
 
         if (!isAutoAimActive) {
@@ -412,7 +414,6 @@ class AimCanvasView(context: Context) : View(context) {
         val b = tableBounds.bottom
         val midX = (l + r) / 2f
 
-        // Pocket mouth centers aligned with cushion corners
         pockets.add(Vector2D(l, t))       // 0: Top-Left
         pockets.add(Vector2D(midX, t))    // 1: Top-Center
         pockets.add(Vector2D(r, t))       // 2: Top-Right
@@ -432,7 +433,7 @@ class AimCanvasView(context: Context) : View(context) {
         isMatchDetected = matchActive
         if (!isMasterOverlayEnabled) return
 
-        if (detectedBounds != null && detectedBounds.width() > 100f && detectedBounds.height() > 80f) {
+        if (!isUserCalibrationSaved && detectedBounds != null && detectedBounds.width() > 100f && detectedBounds.height() > 80f) {
             tableBounds.set(
                 detectedBounds.left + offsetX,
                 detectedBounds.top + offsetY,
@@ -473,14 +474,34 @@ class AimCanvasView(context: Context) : View(context) {
     }
 
     private fun drawCalibrationOverlay(canvas: Canvas) {
-        // 1. Draw outer table border with laser cyan rectangle
+        // 1. Draw outer table border with vivid red neon rectangle (matching user diagram)
         canvas.drawRect(tableBounds, calibBorderPaint)
+
+        // Draw segmented cushions matching pool table rails
+        val l = tableBounds.left
+        val r = tableBounds.right
+        val t = tableBounds.top
+        val b = tableBounds.bottom
+        val midX = (l + r) / 2f
+        val pocketIndent = ballRadius * 1.6f * pocketScale
+
+        // Top rails (left & right separated by center pocket)
+        canvas.drawLine(l + pocketIndent, t, midX - pocketIndent * 0.7f, t, calibBorderPaint)
+        canvas.drawLine(midX + pocketIndent * 0.7f, t, r - pocketIndent, t, calibBorderPaint)
+
+        // Bottom rails
+        canvas.drawLine(l + pocketIndent, b, midX - pocketIndent * 0.7f, b, calibBorderPaint)
+        canvas.drawLine(midX + pocketIndent * 0.7f, b, r - pocketIndent, b, calibBorderPaint)
+
+        // Left & Right rails
+        canvas.drawLine(l, t + pocketIndent, l, b - pocketIndent, calibBorderPaint)
+        canvas.drawLine(r, t + pocketIndent, r, b - pocketIndent, calibBorderPaint)
 
         // 2. Center division lines (Axes)
         canvas.drawLine(tableBounds.left, tableBounds.centerY(), tableBounds.right, tableBounds.centerY(), pocketGuidePaint)
         canvas.drawLine(tableBounds.centerX(), tableBounds.top, tableBounds.centerX(), tableBounds.bottom, pocketGuidePaint)
 
-        // 3. Highlight 6 pockets with numbers & labels
+        // 3. Highlight 6 pockets with numbers & red outlines
         val pocketLabels = arrayOf(
             "1. جيب علوي يسار",
             "2. جيب علوي وسط",
@@ -504,8 +525,8 @@ class AimCanvasView(context: Context) : View(context) {
         // 4. Instructions in table center
         val cx = tableBounds.centerX()
         val cy = tableBounds.centerY()
-        canvas.drawText("🎯 وضع معايرة الجيوب وأبعاد الطاولة", cx, cy - 22f, calibTextPaint)
-        canvas.drawText("اضبط العرض والارتفاع وحجم الثقوب لتطابق فتحات اللعبة تماماً", cx, cy + 24f, calibSubTextPaint)
+        canvas.drawText("🎯 وضع إعداد ومعايرة الطاولة (Setup Mode)", cx, cy - 22f, calibTextPaint)
+        canvas.drawText("طابق الحواف الحمراء والجيوب مع وضع التمرين ثم اضغط '💾 حفظ وتثبيت'", cx, cy + 24f, calibSubTextPaint)
     }
 
     override fun onDraw(canvas: Canvas) {

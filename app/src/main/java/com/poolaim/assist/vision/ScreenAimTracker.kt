@@ -77,6 +77,11 @@ class ScreenAimTracker(
     private var matchConfidenceFrames = 0
 
     var isAutoTrackingEnabled = true
+    var userCalibratedBounds: RectF? = null
+
+    fun setCalibratedTableBounds(bounds: RectF?) {
+        userCalibratedBounds = bounds
+    }
 
     fun updateScreenMetrics(customW: Int = -1, customH: Int = -1) {
         try {
@@ -189,10 +194,29 @@ class ScreenAimTracker(
         val width = image.width
         val height = image.height
 
-        var tableStartX = (width * 0.12f).toInt()
-        var tableEndX = (width * 0.88f).toInt()
-        var tableStartY = (height * 0.14f).toInt()
-        var tableEndY = (height * 0.86f).toInt()
+        val scaleToCaptureX = width.toFloat() / screenWidth.toFloat()
+        val scaleToCaptureY = height.toFloat() / screenHeight.toFloat()
+
+        val calib = userCalibratedBounds
+        val isCalibrated = (calib != null && calib.width() > 100f && calib.height() > 80f)
+
+        var tableStartX: Int
+        var tableEndX: Int
+        var tableStartY: Int
+        var tableEndY: Int
+
+        if (isCalibrated) {
+            // Strictly bound to user's ground-truth saved physical red cushions!
+            tableStartX = (calib!!.left * scaleToCaptureX).toInt().coerceIn(0, width - 20)
+            tableEndX = (calib.right * scaleToCaptureX).toInt().coerceIn(tableStartX + 20, width)
+            tableStartY = (calib.top * scaleToCaptureY).toInt().coerceIn(0, height - 20)
+            tableEndY = (calib.bottom * scaleToCaptureY).toInt().coerceIn(tableStartY + 20, height)
+        } else {
+            tableStartX = (width * 0.12f).toInt()
+            tableEndX = (width * 0.88f).toInt()
+            tableStartY = (height * 0.14f).toInt()
+            tableEndY = (height * 0.86f).toInt()
+        }
 
         val ballRadiusEst = height * 0.022f
 
@@ -307,79 +331,81 @@ class ScreenAimTracker(
             return
         }
 
-        // Dynamically detect real table felt cushion boundaries (Zero-DPI calibration)
-        val scanMidY = height / 2
-        var detectedStartX = tableStartX
-        var detectedEndX = tableEndX
-        var detectedStartY = tableStartY
-        var detectedEndY = tableEndY
+        // Dynamically detect real table felt cushion boundaries ONLY when user has not saved custom bounds
+        if (!isCalibrated) {
+            val scanMidY = height / 2
+            var detectedStartX = tableStartX
+            var detectedEndX = tableEndX
+            var detectedStartY = tableStartY
+            var detectedEndY = tableEndY
 
-        // Left cushion scan (horizontal centerline)
-        for (x in (width * 0.30f).toInt() downTo (width * 0.04f).toInt() step 2) {
-            val c = getPixelPacked(buffer, x, scanMidY, rowStride, pixelStride, width, height)
-            val r = (c shr 16) and 0xFF
-            val gCol = (c shr 8) and 0xFF
-            val b = c and 0xFF
-            if (!isFelt(r, gCol, b)) {
-                detectedStartX = x + 3
-                break
+            // Left cushion scan (horizontal centerline)
+            for (x in (width * 0.30f).toInt() downTo (width * 0.04f).toInt() step 2) {
+                val c = getPixelPacked(buffer, x, scanMidY, rowStride, pixelStride, width, height)
+                val r = (c shr 16) and 0xFF
+                val gCol = (c shr 8) and 0xFF
+                val b = c and 0xFF
+                if (!isFelt(r, gCol, b)) {
+                    detectedStartX = x + 3
+                    break
+                }
             }
-        }
-        // Right cushion scan
-        for (x in (width * 0.70f).toInt() until (width * 0.96f).toInt() step 2) {
-            val c = getPixelPacked(buffer, x, scanMidY, rowStride, pixelStride, width, height)
-            val r = (c shr 16) and 0xFF
-            val gCol = (c shr 8) and 0xFF
-            val b = c and 0xFF
-            if (!isFelt(r, gCol, b)) {
-                detectedEndX = x - 3
-                break
+            // Right cushion scan
+            for (x in (width * 0.70f).toInt() until (width * 0.96f).toInt() step 2) {
+                val c = getPixelPacked(buffer, x, scanMidY, rowStride, pixelStride, width, height)
+                val r = (c shr 16) and 0xFF
+                val gCol = (c shr 8) and 0xFF
+                val b = c and 0xFF
+                if (!isFelt(r, gCol, b)) {
+                    detectedEndX = x - 3
+                    break
+                }
             }
-        }
 
-        // Top and Bottom cushion scan (scan away from center pockets at 32% and 68% table width)
-        val scanRailX1 = (width * 0.32f).toInt()
-        val scanRailX2 = (width * 0.68f).toInt()
-        var topY1 = -1
-        var topY2 = -1
-        for (y in (height * 0.35f).toInt() downTo (height * 0.06f).toInt() step 2) {
-            val c1 = getPixelPacked(buffer, scanRailX1, y, rowStride, pixelStride, width, height)
-            if (topY1 < 0 && !isFelt((c1 shr 16) and 0xFF, (c1 shr 8) and 0xFF, c1 and 0xFF)) {
-                topY1 = y + 3
+            // Top and Bottom cushion scan (scan away from center pockets at 32% and 68% table width)
+            val scanRailX1 = (width * 0.32f).toInt()
+            val scanRailX2 = (width * 0.68f).toInt()
+            var topY1 = -1
+            var topY2 = -1
+            for (y in (height * 0.35f).toInt() downTo (height * 0.06f).toInt() step 2) {
+                val c1 = getPixelPacked(buffer, scanRailX1, y, rowStride, pixelStride, width, height)
+                if (topY1 < 0 && !isFelt((c1 shr 16) and 0xFF, (c1 shr 8) and 0xFF, c1 and 0xFF)) {
+                    topY1 = y + 3
+                }
+                val c2 = getPixelPacked(buffer, scanRailX2, y, rowStride, pixelStride, width, height)
+                if (topY2 < 0 && !isFelt((c2 shr 16) and 0xFF, (c2 shr 8) and 0xFF, c2 and 0xFF)) {
+                    topY2 = y + 3
+                }
+                if (topY1 >= 0 && topY2 >= 0) break
             }
-            val c2 = getPixelPacked(buffer, scanRailX2, y, rowStride, pixelStride, width, height)
-            if (topY2 < 0 && !isFelt((c2 shr 16) and 0xFF, (c2 shr 8) and 0xFF, c2 and 0xFF)) {
-                topY2 = y + 3
+            if (topY1 >= 0 || topY2 >= 0) {
+                detectedStartY = if (topY1 >= 0 && topY2 >= 0) minOf(topY1, topY2) else maxOf(topY1, topY2)
             }
-            if (topY1 >= 0 && topY2 >= 0) break
-        }
-        if (topY1 >= 0 || topY2 >= 0) {
-            detectedStartY = if (topY1 >= 0 && topY2 >= 0) minOf(topY1, topY2) else maxOf(topY1, topY2)
-        }
 
-        var botY1 = -1
-        var botY2 = -1
-        for (y in (height * 0.65f).toInt() until (height * 0.94f).toInt() step 2) {
-            val c1 = getPixelPacked(buffer, scanRailX1, y, rowStride, pixelStride, width, height)
-            if (botY1 < 0 && !isFelt((c1 shr 16) and 0xFF, (c1 shr 8) and 0xFF, c1 and 0xFF)) {
-                botY1 = y - 3
+            var botY1 = -1
+            var botY2 = -1
+            for (y in (height * 0.65f).toInt() until (height * 0.94f).toInt() step 2) {
+                val c1 = getPixelPacked(buffer, scanRailX1, y, rowStride, pixelStride, width, height)
+                if (botY1 < 0 && !isFelt((c1 shr 16) and 0xFF, (c1 shr 8) and 0xFF, c1 and 0xFF)) {
+                    botY1 = y - 3
+                }
+                val c2 = getPixelPacked(buffer, scanRailX2, y, rowStride, pixelStride, width, height)
+                if (botY2 < 0 && !isFelt((c2 shr 16) and 0xFF, (c2 shr 8) and 0xFF, c2 and 0xFF)) {
+                    botY2 = y - 3
+                }
+                if (botY1 >= 0 && botY2 >= 0) break
             }
-            val c2 = getPixelPacked(buffer, scanRailX2, y, rowStride, pixelStride, width, height)
-            if (botY2 < 0 && !isFelt((c2 shr 16) and 0xFF, (c2 shr 8) and 0xFF, c2 and 0xFF)) {
-                botY2 = y - 3
+            if (botY1 >= 0 || botY2 >= 0) {
+                detectedEndY = if (botY1 >= 0 && botY2 >= 0) maxOf(botY1, botY2) else minOf(botY1, botY2)
             }
-            if (botY1 >= 0 && botY2 >= 0) break
-        }
-        if (botY1 >= 0 || botY2 >= 0) {
-            detectedEndY = if (botY1 >= 0 && botY2 >= 0) maxOf(botY1, botY2) else minOf(botY1, botY2)
-        }
 
-        // Validate sanity
-        if (detectedEndX - detectedStartX > width * 0.45f && detectedEndY - detectedStartY > height * 0.35f) {
-            tableStartX = detectedStartX
-            tableEndX = detectedEndX
-            tableStartY = detectedStartY
-            tableEndY = detectedEndY
+            // Validate sanity
+            if (detectedEndX - detectedStartX > width * 0.45f && detectedEndY - detectedStartY > height * 0.35f) {
+                tableStartX = detectedStartX
+                tableEndX = detectedEndX
+                tableStartY = detectedStartY
+                tableEndY = detectedEndY
+            }
         }
 
         // =========================================================================
@@ -561,124 +587,162 @@ class ScreenAimTracker(
                             }
                         }
                     }
-                }
             }
             if (detectedBalls.size >= 15) break
         }
 
         // =========================================================================
-        // STEP 4: RADIAL IN-GAME GUIDELINE & CUE STICK AIM ANGLE TRACKER
+        // STEP 4: SUB-PIXEL NATIVE WHITE LINE LINEAR REGRESSION ENGINE
         // =========================================================================
         val piF = Math.PI.toFloat()
         val degToRad = (piF / 180f)
 
-        fun scoreAngle(cx: Float, cy: Float, radius: Float, theta: Float): Float {
-            val cosT = cos(theta.toDouble()).toFloat()
-            val sinT = sin(theta.toDouble()).toFloat()
+        // Gather candidate points belonging to the game's native white aiming line
+        val linePointsX = ArrayList<Float>(120)
+        val linePointsY = ArrayList<Float>(120)
 
-            var score = 0f
+        val minR = ballRadiusEst * 1.25f
+        val maxR = ballRadiusEst * 6.50f
+        val rStep = maxOf(1.5f, ballRadiusEst * 0.15f)
 
-            // 1. Check in-game white aiming line ahead along theta (distances: 1.4R, 2.2R, 3.0R)
-            for (g in 1..3) {
-                val dFwd = radius * (1.3f + g * 0.9f)
-                val fx = (cx + dFwd * cosT).toInt()
-                val fy = (cy + dFwd * sinT).toInt()
-                if (fx in tableStartX..tableEndX && fy in tableStartY..tableEndY) {
-                    val c = getPixelPacked(buffer, fx, fy, rowStride, pixelStride, width, height)
+        var rSweep = minR
+        while (rSweep <= maxR) {
+            var aDeg = 0
+            while (aDeg < 360) {
+                val rad = aDeg * degToRad
+                val cosA = cos(rad.toDouble()).toFloat()
+                val sinA = sin(rad.toDouble()).toFloat()
+                val px = (detectedCueX + rSweep * cosA).toInt()
+                val py = (detectedCueY + rSweep * sinA).toInt()
+
+                if (px in tableStartX..tableEndX && py in tableStartY..tableEndY) {
+                    val c = getPixelPacked(buffer, px, py, rowStride, pixelStride, width, height)
                     val r = (c shr 16) and 0xFF
                     val gCol = (c shr 8) and 0xFF
                     val b = c and 0xFF
-                    if (isWhiteLineColor(r, gCol, b)) {
-                        score += 3.5f
+
+                    val lum = 0.299f * r + 0.587f * gCol + 0.114f * b
+                    val diff = maxOf(r, maxOf(gCol, b)) - minOf(r, minOf(gCol, b))
+
+                    // Solid native line criteria
+                    if (((lum > 190f && diff < 38) || (r > 210 && gCol > 210 && b > 210)) && (lum - feltLum > 35f)) {
+                        var insideObjectBall = false
+                        val safeBallDistSq = (ballRadiusEst * 1.10f) * (ballRadiusEst * 1.10f)
+                        for (ob in detectedBalls) {
+                            val dSq = (px - ob.x) * (px - ob.x) + (py - ob.y) * (py - ob.y)
+                            if (dSq <= safeBallDistSq) {
+                                insideObjectBall = true
+                                break
+                            }
+                        }
+
+                        if (!insideObjectBall) {
+                            linePointsX.add(px.toFloat())
+                            linePointsY.add(py.toFloat())
+                        }
                     }
                 }
+                aDeg += 2
             }
-
-            // 2. Check cue stick behind ball along (theta + PI) (distances: 1.8R, 2.8R, 3.8R, 4.8R)
-            // Works with ANY cue stick (fire, dragon, wood, metallic) because it is NOT table felt!
-            for (s in 1..4) {
-                val dBack = radius * (1.8f + s * 1.0f)
-                val bx = (cx - dBack * cosT).toInt()
-                val by = (cy - dBack * sinT).toInt()
-
-                if (bx in tableStartX..tableEndX && by in tableStartY..tableEndY) {
-                    val c = getPixelPacked(buffer, bx, by, rowStride, pixelStride, width, height)
-                    val r = (c shr 16) and 0xFF
-                    val gCol = (c shr 8) and 0xFF
-                    val b = c and 0xFF
-                    if (!isFelt(r, gCol, b)) {
-                        score += 1.5f
-                    }
-                }
-            }
-
-            return score
+            rSweep += rStep
         }
 
-        fun findBestAngle(centerAngle: Float, rangeDeg: Float, coarseStepDeg: Float, fineStepDeg: Float): Pair<Float, Float> {
-            var bestCoarseScore = -1f
-            var bestCoarseAngle = centerAngle
+        var detectedAngle = smoothAngle
+        var hasValidAngle = false
 
-            val halfRange = rangeDeg / 2f
-            val numCoarseSteps = (rangeDeg / coarseStepDeg).toInt()
+        if (linePointsX.size >= 8) {
+            // 2D Orthogonal Distance Linear Regression (Total Least Squares)
+            val n = linePointsX.size
+            var meanX = 0.0
+            var meanY = 0.0
+            for (i in 0 until n) {
+                meanX += linePointsX[i]
+                meanY += linePointsY[i]
+            }
+            meanX /= n
+            meanY /= n
 
-            for (i in 0..numCoarseSteps) {
-                val theta = centerAngle - (halfRange * degToRad) + (i * coarseStepDeg * degToRad)
-                val sc = scoreAngle(detectedCueX, detectedCueY, ballRadiusEst, theta)
-                if (sc > bestCoarseScore) {
-                    bestCoarseScore = sc
-                    bestCoarseAngle = theta
-                }
+            var sxx = 0.0
+            var syy = 0.0
+            var sxy = 0.0
+            for (i in 0 until n) {
+                val dx = linePointsX[i] - meanX
+                val dy = linePointsY[i] - meanY
+                sxx += dx * dx
+                syy += dy * dy
+                sxy += dx * dy
             }
 
-            if (bestCoarseScore < 2.0f) {
-                return Pair(bestCoarseScore, bestCoarseAngle)
+            // Direction of maximum variance / principal axis of line
+            val fitTheta = 0.5 * atan2(2.0 * sxy, sxx - syy)
+            var regAngle = fitTheta.toFloat()
+
+            // Resolve forward direction (vector from cue ball towards line centroid)
+            val toCentroidX = (meanX - detectedCueX).toFloat()
+            val toCentroidY = (meanY - detectedCueY).toFloat()
+            val forwardDot = toCentroidX * cos(regAngle.toDouble()).toFloat() + toCentroidY * sin(regAngle.toDouble()).toFloat()
+            if (forwardDot < 0) {
+                regAngle += piF
             }
 
-            // Fine sub-degree 0.1° search around bestCoarseAngle (±1.5°)
-            var bestFineScore = bestCoarseScore
-            var bestFineAngle = bestCoarseAngle
-            val fineRange = 1.5f
-            val numFineSteps = (fineRange * 2f / fineStepDeg).toInt()
+            while (regAngle > piF) regAngle -= (2f * piF)
+            while (regAngle < -piF) regAngle += (2f * piF)
 
-            for (i in 0..numFineSteps) {
-                val theta = bestCoarseAngle - (fineRange * degToRad) + (i * fineStepDeg * degToRad)
-                val sc = scoreAngle(detectedCueX, detectedCueY, ballRadiusEst, theta)
-                if (sc > bestFineScore) {
-                    bestFineScore = sc
-                    bestFineAngle = theta
-                }
-            }
-
-            return Pair(bestFineScore, bestFineAngle)
-        }
-
-        // Two-Pass Sub-Degree Precision Execution
-        if (lockFrames > 0) {
-            val (score, angle) = findBestAngle(smoothAngle, rangeDeg = 60f, coarseStepDeg = 1.0f, fineStepDeg = 0.1f)
-            if (score >= 2.0f) {
-                var diff = angle - smoothAngle
-                while (diff < -piF) diff += (2f * piF)
-                while (diff > piF) diff -= (2f * piF)
-
-                val alpha = if (abs(diff) > 0.08f) 0.80f else 0.45f
-                smoothAngle += diff * alpha
-                while (smoothAngle < -piF) smoothAngle += (2f * piF)
-                while (smoothAngle > piF) smoothAngle -= (2f * piF)
-                lockFrames++
-            } else {
-                // If angle shifted significantly, sweep full 360°
-                val (broadScore, broadAngle) = findBestAngle(0f, rangeDeg = 360f, coarseStepDeg = 2.0f, fineStepDeg = 0.1f)
-                if (broadScore >= 2.0f) {
-                    smoothAngle = broadAngle
-                }
-            }
+            detectedAngle = regAngle
+            hasValidAngle = true
         } else {
-            val (score, angle) = findBestAngle(0f, rangeDeg = 360f, coarseStepDeg = 2.0f, fineStepDeg = 0.1f)
-            if (score >= 2.0f) {
-                smoothAngle = angle
-                lockFrames = 1
+            // Fallback: Cue Stick behind ball angle tracker
+            fun scoreCueStickAngle(cx: Float, cy: Float, radius: Float, theta: Float): Float {
+                val cosT = cos(theta.toDouble()).toFloat()
+                val sinT = sin(theta.toDouble()).toFloat()
+                var score = 0f
+                for (s in 1..5) {
+                    val dBack = radius * (1.6f + s * 1.0f)
+                    val bx = (cx - dBack * cosT).toInt()
+                    val by = (cy - dBack * sinT).toInt()
+                    if (bx in tableStartX..tableEndX && by in tableStartY..tableEndY) {
+                        val c = getPixelPacked(buffer, bx, by, rowStride, pixelStride, width, height)
+                        val r = (c shr 16) and 0xFF
+                        val gCol = (c shr 8) and 0xFF
+                        val b = c and 0xFF
+                        if (!isFelt(r, gCol, b)) {
+                            score += 1.5f
+                        }
+                    }
+                }
+                return score
             }
+
+            var bestScore = -1f
+            var bestAng = smoothAngle
+            val searchRange = if (lockFrames > 0) 60f else 360f
+            val halfR = searchRange / 2f
+            val steps = (searchRange / 2.0f).toInt()
+            for (i in 0..steps) {
+                val th = smoothAngle - (halfR * degToRad) + (i * 2.0f * degToRad)
+                val sc = scoreCueStickAngle(detectedCueX, detectedCueY, ballRadiusEst, th)
+                if (sc > bestScore) {
+                    bestScore = sc
+                    bestAng = th
+                }
+            }
+
+            if (bestScore >= 2.0f) {
+                detectedAngle = bestAng
+                hasValidAngle = true
+            }
+        }
+
+        if (hasValidAngle) {
+            var diff = detectedAngle - smoothAngle
+            while (diff < -piF) diff += (2f * piF)
+            while (diff > piF) diff -= (2f * piF)
+
+            val alpha = if (abs(diff) > 0.08f) 0.85f else 0.45f
+            smoothAngle += diff * alpha
+            while (smoothAngle < -piF) smoothAngle += (2f * piF)
+            while (smoothAngle > piF) smoothAngle -= (2f * piF)
+            lockFrames++
         }
 
         // =========================================================================
@@ -745,12 +809,16 @@ class ScreenAimTracker(
             null
         }
 
-        val detectedBounds = RectF(
-            tableStartX * scaleX,
-            tableStartY * scaleY,
-            tableEndX * scaleX,
-            tableEndY * scaleY
-        )
+        val detectedBounds = if (isCalibrated && userCalibratedBounds != null) {
+            userCalibratedBounds!!
+        } else {
+            RectF(
+                tableStartX * scaleX,
+                tableStartY * scaleY,
+                tableEndX * scaleX,
+                tableEndY * scaleY
+            )
+        }
 
         listener.onAimUpdated(
             cueBallPos = Vector2D(realCueX, realCueY),

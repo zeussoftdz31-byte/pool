@@ -363,6 +363,26 @@ class AimOverlayService : Service(), SensorEventListener {
             // ========================================================
             // TAB 1: VISUALS (Table Zoom, Pocket Size, D-Pad, Auto-Fit)
             // ========================================================
+            val switchCalibrationMode = modMenuView?.findViewById<SwitchCompat>(R.id.switchCalibrationMode)
+            val btnSaveCalibration = modMenuView?.findViewById<View>(R.id.btnSaveCalibration)
+
+            switchCalibrationMode?.isChecked = canvasView?.isCalibrationModeActive ?: false
+            switchCalibrationMode?.setOnCheckedChangeListener { _, isChecked ->
+                canvasView?.isCalibrationModeActive = isChecked
+                canvasView?.postInvalidate()
+            }
+
+            btnSaveCalibration?.setOnClickListener {
+                canvasView?.saveCalibration(markAsUserSaved = true)
+                canvasView?.isCalibrationModeActive = false
+                switchCalibrationMode?.isChecked = false
+                canvasView?.postInvalidate()
+                canvasView?.tableBounds?.let { b ->
+                    aimTracker?.setCalibratedTableBounds(b)
+                }
+                Toast.makeText(this, "💾 تم حفظ وتثبيت حدود الطاولة بنجاح! المحرك مقيد الآن داخل الحواف الحمراء بدقة 100%", Toast.LENGTH_LONG).show()
+            }
+
             val seekTableZoom = modMenuView?.findViewById<SeekBar>(R.id.seekTableZoom)
             val tvTableZoomVal = modMenuView?.findViewById<TextView>(R.id.tvTableZoomVal)
             val seekPocketSize = modMenuView?.findViewById<SeekBar>(R.id.seekPocketSize)
@@ -722,6 +742,9 @@ class AimOverlayService : Service(), SensorEventListener {
                             canvasView?.setMatchActive(isMatch)
                         }
                     })
+                    if (canvasView?.isUserCalibrationSaved == true) {
+                        aimTracker?.setCalibratedTableBounds(canvasView?.tableBounds)
+                    }
                     aimTracker?.start()
                 }
             } catch (e: Exception) {
