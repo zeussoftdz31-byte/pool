@@ -41,4 +41,7 @@ dependencies {
     implementation 'com.google.android.material:material:1.11.0'
     implementation 'androidx.constraintlayout:constraintlayout:2.1.4'
     implementation 'androidx.lifecycle:lifecycle-service:2.7.0'
+
+    // Official OpenCV 4.9.0 Android SDK from MavenCentral (ARM64-v8a / armeabi-v7a native C++ acceleration)
+    implementation 'org.opencv:opencv:4.9.0'
 }

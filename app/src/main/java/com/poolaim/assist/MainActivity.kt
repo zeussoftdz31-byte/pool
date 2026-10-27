@@ -15,6 +15,8 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import com.poolaim.assist.databinding.ActivityMainBinding
 import com.poolaim.assist.overlay.AimOverlayService
+import org.opencv.android.OpenCVLoader
+import android.util.Log
 
 /**
  * Main Launcher Activity.
@@ -60,6 +62,17 @@ class MainActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
+
+        // Initialize OpenCV 4.9.0 local native engine
+        try {
+            if (OpenCVLoader.initLocal()) {
+                Log.i("AimMasterOpenCV", "OpenCV 4.9.0 initialized successfully via initLocal()")
+            } else {
+                Log.w("AimMasterOpenCV", "OpenCV initLocal returned false")
+            }
+        } catch (e: Throwable) {
+            Log.e("AimMasterOpenCV", "Error loading OpenCV", e)
+        }
 
         setupListeners()
     }

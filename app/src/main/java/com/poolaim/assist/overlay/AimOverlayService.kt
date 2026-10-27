@@ -26,6 +26,7 @@ import androidx.core.app.NotificationCompat
 import com.poolaim.assist.R
 import com.poolaim.assist.physics.Vector2D
 import com.poolaim.assist.vision.ScreenAimTracker
+import org.opencv.android.OpenCVLoader
 import kotlin.math.*
 
 /**
@@ -66,6 +67,13 @@ class AimOverlayService : Service(), SensorEventListener {
     override fun onCreate() {
         super.onCreate()
         try {
+            // Initialize OpenCV 4.9.0 native C++ acceleration engine
+            try {
+                OpenCVLoader.initLocal()
+            } catch (e: Throwable) {
+                e.printStackTrace()
+            }
+
             windowManager = getSystemService(Context.WINDOW_SERVICE) as WindowManager
 
             createNotificationChannel()
@@ -84,7 +92,7 @@ class AimOverlayService : Service(), SensorEventListener {
             initModMenu()
             initShakeSensor()
 
-            Toast.makeText(this, "🧙‍♂️ تم تشغيل Wizard Mod! انقر الأيقونة العائمة لفتح القائمة 🎱", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, "🎯 تم تشغيل Aim Master Mod! انقر الأيقونة العائمة لفتح القائمة 🎱", Toast.LENGTH_SHORT).show()
         } catch (e: Exception) {
             e.printStackTrace()
             try {
@@ -102,7 +110,7 @@ class AimOverlayService : Service(), SensorEventListener {
                 "Pool Aim Live Assist Service",
                 NotificationManager.IMPORTANCE_LOW
             ).apply {
-                description = "Foreground Service for 8 Ball Pool Wizard Mod Aim Assist"
+                description = "Foreground Service for 8 Ball Pool Aim Master Mod Assist"
                 setShowBadge(false)
             }
             val manager = getSystemService(NotificationManager::class.java)
@@ -122,8 +130,8 @@ class AimOverlayService : Service(), SensorEventListener {
         )
 
         return NotificationCompat.Builder(this, CHANNEL_ID)
-            .setContentTitle("Pool Wizard Mod v2.0")
-            .setContentText("التتبع التلقائي ومحاكاة قوة المضرب تعمل الآن")
+            .setContentTitle("Aim Master Mod v2.0")
+            .setContentText("التتبع التلقائي المدعوم بـ OpenCV يعمل الآن")
             .setSmallIcon(android.R.drawable.sym_def_app_icon)
             .addAction(android.R.drawable.ic_menu_close_clear_cancel, "إيقاف", stopPendingIntent)
             .setOngoing(true)
