@@ -587,6 +587,7 @@ class ScreenAimTracker(
                             }
                         }
                     }
+                }
             }
             if (detectedBalls.size >= 15) break
         }
