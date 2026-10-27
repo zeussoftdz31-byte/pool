@@ -154,6 +154,18 @@ class AimCanvasView(context: Context) : View(context) {
         pathEffect = DashPathEffect(floatArrayOf(10f, 10f), 0f)
     }
 
+    private val cueAnchorRingPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = Color.parseColor("#B3FFFFFF")
+        style = Paint.Style.STROKE
+        strokeWidth = 2.5f
+        pathEffect = DashPathEffect(floatArrayOf(6f, 6f), 0f)
+    }
+
+    private val cueAnchorCorePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = Color.WHITE
+        style = Paint.Style.FILL
+    }
+
     // Interactive Calibration Paints
     private val calibBorderPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = Color.parseColor("#00E5FF") // Laser cyan
@@ -645,8 +657,9 @@ class AimCanvasView(context: Context) : View(context) {
             }
         }
 
-        // Draw Cue Ball Origin Marker
-        canvas.drawCircle(cueBallPos.x, cueBallPos.y, ballRadius * 1.25f, ghostBallPaint)
-        canvas.drawCircle(cueBallPos.x, cueBallPos.y, 4f, directAimPaint)
+        // Draw Cue Ball Origin Marker (الكرة البيضاء هي الأساس الثابت وقاعدة انطلاق الخطوط)
+        canvas.drawCircle(cueBallPos.x, cueBallPos.y, ballRadius * 1.15f, cueAnchorRingPaint)
+        canvas.drawCircle(cueBallPos.x, cueBallPos.y, ballRadius * 0.40f, ghostBallPaint)
+        canvas.drawCircle(cueBallPos.x, cueBallPos.y, 4f, cueAnchorCorePaint)
     }
 }

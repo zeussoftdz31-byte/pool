@@ -206,27 +206,24 @@ class ScreenAimTracker(
         val piF = Math.PI.toFloat()
 
         /**
-         * Validates that candidate center (cx, cy) is a genuine white cue ball:
-         * 1. Equatorial perimeter has no colored stripes (rejects balls 9 to 15).
-         * 2. Outer perimeter (1.45R) is surrounded by table felt (rejects UI buttons, avatars, touches).
+         * Checks whether candidate center (cx, cy) resembles a white pool ball:
+         * 1. Rejects colored striped balls (balls 9-15) via equatorial saturation.
+         * 2. Rejects out-of-table elements via felt neighborhood check.
          */
-        fun isTrueCueBall(cx: Float, cy: Float, radius: Float): Boolean {
-            // A. Check for absence of colored stripe
+        fun isCandidateBallSurface(cx: Float, cy: Float, radius: Float): Boolean {
             var coloredPoints = 0
-            val perimeterSamples = 16
+            val perimeterSamples = 14
             for (i in 0 until perimeterSamples) {
                 val angle = i * (2f * piF) / perimeterSamples
-                val px = (cx + radius * 0.85f * cos(angle.toDouble()).toFloat()).toInt()
-                val py = (cy + radius * 0.85f * sin(angle.toDouble()).toFloat()).toInt()
+                val px = (cx + radius * 0.82f * cos(angle.toDouble()).toFloat()).toInt()
+                val py = (cy + radius * 0.82f * sin(angle.toDouble()).toFloat()).toInt()
                 val rgb = getPixelRgb(px, py)
-                val sat = getSaturation(rgb)
-                if (sat > 0.28f) {
+                if (getSaturation(rgb) > 0.28f) {
                     coloredPoints++
                 }
             }
-            if (coloredPoints > 1) return false
+            if (coloredPoints > 2) return false
 
-            // B. Check that object is resting on table felt (rejects menus, chalk, chat, fingers)
             var feltSurroundPoints = 0
             val surroundSamples = 12
             for (i in 0 until surroundSamples) {
@@ -237,82 +234,251 @@ class ScreenAimTracker(
                     feltSurroundPoints++
                 }
             }
-
-            return feltSurroundPoints >= 7
+            return feltSurroundPoints >= 6
         }
 
-        // ==========================================
-        // 2. Locate & Lock Cue Ball with Hysteresis
-        // ==========================================
+        /**
+         * CUE STICK DETECTION & SUB-PIXEL ANCHOR:
+         * Uses the physical cue stick (المضرب) as the absolute guide to confirm the Cue Ball.
+         *
+         * Key Properties:
+         * 1. Only the true Cue Ball has a cue stick positioned behind it pointing at its center.
+         * 2. The cue stick shaft forms a distinct non-felt strip flanked by table felt on both sides (+-8px).
+         * 3. The forward guideline extends ahead of the ball flanked by felt (+-4px).
+         * 4. Sub-pixel precision: Refines the cue ball center along and across the stick axis.
+         */
+        class CueStickEvidence(
+            val hasCueStick: Boolean,
+            val angleRad: Float,
+            val confidence: Float,
+            val refinedCenterX: Float,
+            val refinedCenterY: Float
+        )
+
+        fun inspectCueStickAndGuideline(
+            cx: Float,
+            cy: Float,
+            radius: Float
+        ): CueStickEvidence {
+            var bestScore = -1f
+            var bestAngle = smoothAngle
+            val angleSteps = 120 // 3-degree resolution (360 degrees)
+
+            for (i in 0 until angleSteps) {
+                val theta = i * (2f * piF) / angleSteps
+                val cosT = cos(theta.toDouble()).toFloat()
+                val sinT = sin(theta.toDouble()).toFloat()
+                val perpX = -sinT
+                val perpY = cosT
+
+                var stickScore = 0f
+                var guideScore = 0f
+
+                // 1. Backward Cue Stick Check (along direction theta + pi)
+                // Tests 5 radial points along the cue stick shaft behind the ball
+                for (s in 1..5) {
+                    val distBack = radius * (1.7f + s * 1.15f)
+                    val bx = (cx - distBack * cosT).toInt()
+                    val by = (cy - distBack * sinT).toInt()
+
+                    if (bx in tableStartX..tableEndX && by in tableStartY..tableEndY) {
+                        val centerRgb = getPixelRgb(bx, by)
+                        // Cue stick body is non-felt
+                        if (!isFeltPixel(centerRgb)) {
+                            // Cue stick is flanked by table felt on left & right (+-8px)
+                            val leftRgb = getPixelRgb((bx - 8 * perpX).toInt(), (by - 8 * perpY).toInt())
+                            val rightRgb = getPixelRgb((bx + 8 * perpX).toInt(), (by + 8 * perpY).toInt())
+                            if (isFeltPixel(leftRgb) && isFeltPixel(rightRgb)) {
+                                stickScore += 1.5f
+                            }
+                        }
+                    }
+                }
+
+                // 2. Forward Guideline Check (along direction theta ahead of the ball)
+                for (g in 1..3) {
+                    val distFwd = radius * (1.6f + g * 0.9f)
+                    val fx = (cx + distFwd * cosT).toInt()
+                    val fy = (cy + distFwd * sinT).toInt()
+
+                    if (fx in tableStartX..tableEndX && fy in tableStartY..tableEndY) {
+                        val centerRgb = getPixelRgb(fx, fy)
+                        val dr = abs(centerRgb[0] - feltR)
+                        val dg = abs(centerRgb[1] - feltG)
+                        val db = abs(centerRgb[2] - feltB)
+                        val centerContrast = dr + dg + db
+                        if (isWhitePixel(centerRgb) || centerContrast > 60) {
+                            val leftRgb = getPixelRgb((fx - 4 * perpX).toInt(), (fy - 4 * perpY).toInt())
+                            val rightRgb = getPixelRgb((fx + 4 * perpX).toInt(), (fy + 4 * perpY).toInt())
+                            if (isFeltPixel(leftRgb) && isFeltPixel(rightRgb)) {
+                                guideScore += 1.0f
+                            }
+                        }
+                    }
+                }
+
+                val totalScore = stickScore + guideScore
+                if (totalScore > bestScore) {
+                    bestScore = totalScore
+                    bestAngle = theta
+                }
+            }
+
+            val hasCueStick = bestScore >= 2.8f
+
+            // Refine Cue Ball center with sub-pixel precision along the stick vector
+            var refinedX = cx
+            var refinedY = cy
+            if (hasCueStick) {
+                val cosA = cos(bestAngle.toDouble()).toFloat()
+                val sinA = sin(bestAngle.toDouble()).toFloat()
+                val perpX = -sinA
+                val perpY = cosA
+
+                val maxSpan = (radius * 1.35f).toInt()
+                var minT = 0f
+                var maxT = 0f
+                var foundBack = false
+                var foundFront = false
+
+                // Step along cue stick axis
+                for (t in -maxSpan..maxSpan) {
+                    val px = (cx + t * cosA).toInt()
+                    val py = (cy + t * sinA).toInt()
+                    if (isWhitePixel(getPixelRgb(px, py))) {
+                        if (!foundBack) {
+                            minT = t.toFloat()
+                            foundBack = true
+                        }
+                        maxT = t.toFloat()
+                        foundFront = true
+                    }
+                }
+
+                // Step perpendicular to cue stick axis
+                var minS = 0f
+                var maxS = 0f
+                var foundLeft = false
+                var foundRight = false
+
+                for (s in -maxSpan..maxSpan) {
+                    val px = (cx + s * perpX).toInt()
+                    val py = (cy + s * perpY).toInt()
+                    if (isWhitePixel(getPixelRgb(px, py))) {
+                        if (!foundLeft) {
+                            minS = s.toFloat()
+                            foundLeft = true
+                        }
+                        maxS = s.toFloat()
+                        foundRight = true
+                    }
+                }
+
+                if (foundBack && foundFront && foundLeft && foundRight) {
+                    val deltaT = (minT + maxT) / 2f
+                    val deltaS = (minS + maxS) / 2f
+                    refinedX = cx + deltaT * cosA + deltaS * perpX
+                    refinedY = cy + deltaT * sinA + deltaS * perpY
+                }
+            }
+
+            return CueStickEvidence(
+                hasCueStick = hasCueStick,
+                angleRad = bestAngle,
+                confidence = bestScore,
+                refinedCenterX = refinedX,
+                refinedCenterY = refinedY
+            )
+        }
+
+        // ========================================================
+        // 2. Locate & Lock True Cue Ball using Cue Stick Anchor
+        // ========================================================
         var detectedCueX = -1f
         var detectedCueY = -1f
 
         if (isLockedOnCue && lockedCueX > 0 && lockedCueY > 0) {
-            // Search in tight neighborhood (+-22px) around locked cue ball
-            val searchRadius = (ballRadiusEst * 1.6f).toInt()
-            var sumX = 0f
-            var sumY = 0f
-            var count = 0
+            // Already locked: directly verify cue stick & guideline at current locked position
+            val evidence = inspectCueStickAndGuideline(lockedCueX, lockedCueY, ballRadiusEst)
 
-            val startX = (lockedCueX - searchRadius).toInt().coerceIn(tableStartX, tableEndX)
-            val endX = (lockedCueX + searchRadius).toInt().coerceIn(tableStartX, tableEndX)
-            val startY = (lockedCueY - searchRadius).toInt().coerceIn(tableStartY, tableEndY)
-            val endY = (lockedCueY + searchRadius).toInt().coerceIn(tableStartY, tableEndY)
+            if (evidence.hasCueStick) {
+                // Rock-solid smooth anchor: adapt micro-shifts without jitter
+                lockedCueX += (evidence.refinedCenterX - lockedCueX) * 0.20f
+                lockedCueY += (evidence.refinedCenterY - lockedCueY) * 0.20f
+                detectedCueX = lockedCueX
+                detectedCueY = lockedCueY
 
-            for (y in startY..endY step 2) {
-                for (x in startX..endX step 2) {
-                    if (isWhitePixel(getPixelRgb(x, y))) {
-                        sumX += x
-                        sumY += y
-                        count++
+                var diff = evidence.angleRad - smoothAngle
+                while (diff < -piF) diff += (2f * piF)
+                while (diff > piF) diff -= (2f * piF)
+                smoothAngle += diff * 0.40f
+                while (smoothAngle < -piF) smoothAngle += (2f * piF)
+                while (smoothAngle > piF) smoothAngle -= (2f * piF)
+
+                lostFrames = 0
+                lockFrames++
+            } else {
+                // Check tight local neighborhood (+-24px) in case cue ball shifted slightly
+                var foundNearby = false
+                val searchOffsets = arrayOf(
+                    Pair(-12f, 0f), Pair(12f, 0f), Pair(0f, -12f), Pair(0f, 12f),
+                    Pair(-20f, 0f), Pair(20f, 0f), Pair(0f, -20f), Pair(0f, 20f)
+                )
+                for (offset in searchOffsets) {
+                    val nearEvidence = inspectCueStickAndGuideline(
+                        lockedCueX + offset.first,
+                        lockedCueY + offset.second,
+                        ballRadiusEst
+                    )
+                    if (nearEvidence.hasCueStick) {
+                        lockedCueX += (nearEvidence.refinedCenterX - lockedCueX) * 0.35f
+                        lockedCueY += (nearEvidence.refinedCenterY - lockedCueY) * 0.35f
+                        detectedCueX = lockedCueX
+                        detectedCueY = lockedCueY
+
+                        var diff = nearEvidence.angleRad - smoothAngle
+                        while (diff < -piF) diff += (2f * piF)
+                        while (diff > piF) diff -= (2f * piF)
+                        smoothAngle += diff * 0.40f
+                        while (smoothAngle < -piF) smoothAngle += (2f * piF)
+                        while (smoothAngle > piF) smoothAngle -= (2f * piF)
+
+                        lostFrames = 0
+                        lockFrames++
+                        foundNearby = true
+                        break
+                    }
+                }
+
+                if (!foundNearby) {
+                    lostFrames++
+                    // Maintain stable position during shot release or brief occlusion (up to 16 frames)
+                    if (lostFrames in 1..16) {
+                        detectedCueX = lockedCueX
+                        detectedCueY = lockedCueY
+                    } else if (lostFrames > 16) {
+                        isLockedOnCue = false
+                        lockFrames = 0
                     }
                 }
             }
-
-            if (count in 14..280) {
-                val candidateX = sumX / count
-                val candidateY = sumY / count
-                if (isTrueCueBall(candidateX, candidateY, ballRadiusEst)) {
-                    // Smooth micro-anchor to eliminate jitter
-                    lockedCueX += (candidateX - lockedCueX) * 0.18f
-                    lockedCueY += (candidateY - lockedCueY) * 0.18f
-                    detectedCueX = lockedCueX
-                    detectedCueY = lockedCueY
-                    lostFrames = 0
-                    lockFrames++
-                } else {
-                    lostFrames++
-                }
-            } else {
-                lostFrames++
-            }
-
-            // Keep lock for up to 14 missing frames (e.g. finger/cue momentarily over cue ball)
-            if (lostFrames in 1..14) {
-                detectedCueX = lockedCueX
-                detectedCueY = lockedCueY
-            } else if (lostFrames > 14) {
-                isLockedOnCue = false
-                lockFrames = 0
-            }
         }
 
-        // Full table scan if not locked
+        // Full table scan if cue ball is not currently locked
         if (!isLockedOnCue) {
-            var bestScore = -1f
-            var bestCenterX = -1f
-            var bestCenterY = -1f
+            val candidates = mutableListOf<Pair<Float, Float>>()
 
-            for (y in tableStartY until tableEndY step 4) {
-                for (x in tableStartX until tableEndX step 4) {
+            // Scan table playfield for clusters of white ball pixels
+            for (y in tableStartY until tableEndY step 6) {
+                for (x in tableStartX until tableEndX step 6) {
                     val rgb = getPixelRgb(x, y)
                     if (isWhitePixel(rgb)) {
                         var clusterCount = 0
                         var cSumX = 0f
                         var cSumY = 0f
 
-                        for (dy in -7..7 step 2) {
-                            for (dx in -7..7 step 2) {
+                        for (dy in -8..8 step 2) {
+                            for (dx in -8..8 step 2) {
                                 val nx = x + dx
                                 val ny = y + dy
                                 val nRgb = getPixelRgb(nx, ny)
@@ -324,115 +490,50 @@ class ScreenAimTracker(
                             }
                         }
 
-                        if (clusterCount in 16..260) {
+                        if (clusterCount in 14..320) {
                             val cx = cSumX / clusterCount
                             val cy = cSumY / clusterCount
 
-                            if (isTrueCueBall(cx, cy, ballRadiusEst)) {
-                                val score = clusterCount.toFloat()
-                                if (score > bestScore) {
-                                    bestScore = score
-                                    bestCenterX = cx
-                                    bestCenterY = cy
-                                }
+                            // Avoid duplicate candidates within 22px
+                            val isDuplicate = candidates.any { (kX, kY) ->
+                                hypot(cx - kX, cy - kY) < ballRadiusEst * 1.5f
+                            }
+                            if (!isDuplicate && isCandidateBallSurface(cx, cy, ballRadiusEst)) {
+                                candidates.add(Pair(cx, cy))
                             }
                         }
                     }
                 }
             }
 
-            if (bestScore > 0) {
-                lockedCueX = bestCenterX
-                lockedCueY = bestCenterY
-                detectedCueX = bestCenterX
-                detectedCueY = bestCenterY
+            // CRITICAL STEP: Evaluate each candidate with Cue Stick Evidence
+            // Only the true Cue Ball has a physical cue stick pointing at its center!
+            var bestCandidateScore = -1f
+            var bestCandidateEvidence: CueStickEvidence? = null
+
+            for (cand in candidates) {
+                val evidence = inspectCueStickAndGuideline(cand.first, cand.second, ballRadiusEst)
+                if (evidence.hasCueStick && evidence.confidence > bestCandidateScore) {
+                    bestCandidateScore = evidence.confidence
+                    bestCandidateEvidence = evidence
+                }
+            }
+
+            if (bestCandidateEvidence != null && bestCandidateScore >= 2.8f) {
+                lockedCueX = bestCandidateEvidence.refinedCenterX
+                lockedCueY = bestCandidateEvidence.refinedCenterY
+                detectedCueX = lockedCueX
+                detectedCueY = lockedCueY
+                smoothAngle = bestCandidateEvidence.angleRad
                 isLockedOnCue = true
                 lostFrames = 0
                 lockFrames = 1
             }
         }
 
-        // If no cue ball can be locked, do not emit spurious data
+        // If no confirmed cue ball is found, do not emit spurious lines
         if (detectedCueX <= 0 || detectedCueY <= 0) {
             return
-        }
-
-        // ==========================================
-        // 3. Dual-Axis Cue Stick & Guideline Angle Tracking (360° Scan)
-        // ==========================================
-        // Forward guideline is at angle theta (flanked by felt at +-4px)
-        // Cue stick is at angle theta + pi (flanked by felt at +-8px)
-        val angleSamples = 120 // 3-degree resolution
-        var bestAngleScore = -1f
-        var detectedAngle = smoothAngle
-
-        for (i in 0 until angleSamples) {
-            val theta = i * (2f * piF) / angleSamples
-            val cosT = cos(theta.toDouble()).toFloat()
-            val sinT = sin(theta.toDouble()).toFloat()
-
-            // Perpendicular unit vector (-sin, cos)
-            val perpX = -sinT
-            val perpY = cosT
-
-            var forwardGuidelineScore = 0f
-            var backwardCueStickScore = 0f
-
-            // A. Forward Guideline Check: 3 radial points along forward ray
-            for (step in 1..3) {
-                val distFwd = ballRadiusEst * (1.8f + step * 0.9f)
-                val fx = (detectedCueX + distFwd * cosT).toInt()
-                val fy = (detectedCueY + distFwd * sinT).toInt()
-
-                val centerRgb = getPixelRgb(fx, fy)
-                val dr = abs(centerRgb[0] - feltR)
-                val dg = abs(centerRgb[1] - feltG)
-                val db = abs(centerRgb[2] - feltB)
-                val centerContrast = dr + dg + db
-
-                if (isWhitePixel(centerRgb) || centerContrast > 65) {
-                    // Guideline must be thin: verify felt flanks at +-4px
-                    val leftRgb = getPixelRgb((fx - 4 * perpX).toInt(), (fy - 4 * perpY).toInt())
-                    val rightRgb = getPixelRgb((fx + 4 * perpX).toInt(), (fy + 4 * perpY).toInt())
-                    if (isFeltPixel(leftRgb) && isFeltPixel(rightRgb)) {
-                        forwardGuidelineScore += 1.0f
-                    }
-                }
-            }
-
-            // B. Backward Cue Stick Check: 4 radial points behind cue ball
-            for (step in 1..4) {
-                val distBack = ballRadiusEst * (2.8f + step * 1.2f)
-                val bx = (detectedCueX - distBack * cosT).toInt()
-                val by = (detectedCueY - distBack * sinT).toInt()
-
-                val stickCenterRgb = getPixelRgb(bx, by)
-                // Cue stick body is non-felt
-                if (!isFeltPixel(stickCenterRgb)) {
-                    // Cue stick is flanked by felt at +-8px
-                    val leftRgb = getPixelRgb((bx - 8 * perpX).toInt(), (by - 8 * perpY).toInt())
-                    val rightRgb = getPixelRgb((bx + 8 * perpX).toInt(), (by + 8 * perpY).toInt())
-                    if (isFeltPixel(leftRgb) && isFeltPixel(rightRgb)) {
-                        backwardCueStickScore += 1.2f
-                    }
-                }
-            }
-
-            val totalScore = forwardGuidelineScore + backwardCueStickScore
-            if (totalScore > bestAngleScore) {
-                bestAngleScore = totalScore
-                detectedAngle = theta
-            }
-        }
-
-        // Strict Confidence Threshold: Ignore false touch motions if no cue stick / line is seen
-        if (bestAngleScore >= 3.2f) {
-            var diff = detectedAngle - smoothAngle
-            while (diff < -piF) diff += (2f * piF)
-            while (diff > piF) diff -= (2f * piF)
-            smoothAngle += diff * 0.35f
-            while (smoothAngle < -piF) smoothAngle += (2f * piF)
-            while (smoothAngle > piF) smoothAngle -= (2f * piF)
         }
 
         // ==========================================
