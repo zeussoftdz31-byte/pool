@@ -18,6 +18,7 @@ import android.os.IBinder
 import android.os.VibrationEffect
 import android.os.Vibrator
 import android.view.*
+import android.widget.SeekBar
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.widget.SwitchCompat
@@ -253,6 +254,7 @@ class AimOverlayService : Service(), SensorEventListener {
                 layoutCollapsedBadge?.visibility = View.VISIBLE
             }
 
+            val cardMasterSwitch = modMenuView?.findViewById<View>(R.id.cardMasterSwitch)
             val switchMasterAim = modMenuView?.findViewById<SwitchCompat>(R.id.switchMasterAim)
             val tvMasterStatus = modMenuView?.findViewById<TextView>(R.id.tvMasterStatus)
             val switchCalibrationMode = modMenuView?.findViewById<SwitchCompat>(R.id.switchCalibrationMode)
@@ -261,19 +263,22 @@ class AimOverlayService : Service(), SensorEventListener {
             val btnPowerPlus = modMenuView?.findViewById<View>(R.id.btnPowerPlus)
             val tvPowerPercent = modMenuView?.findViewById<TextView>(R.id.tvPowerPercent)
 
-            // Master ON/OFF Switch
+            // Master ON/OFF Switch (Toggle with instant effect)
             switchMasterAim?.setOnCheckedChangeListener { _, isChecked ->
                 canvasView?.let {
                     it.isMasterOverlayEnabled = isChecked
+                    it.visibility = if (isChecked) View.VISIBLE else View.GONE
                     it.postInvalidate()
                 }
                 aimTracker?.isAutoTrackingEnabled = isChecked
                 if (isChecked) {
-                    tvMasterStatus?.text = "الخطوط والثقوب مشتعلة الآن (مفعل)"
+                    tvMasterStatus?.text = "🟢 الخطوط والثقوب مشتعلة الآن (ON)"
                     tvMasterStatus?.setTextColor(Color.parseColor("#A7F3D0"))
+                    cardMasterSwitch?.setBackgroundColor(Color.parseColor("#14532D"))
                 } else {
-                    tvMasterStatus?.text = "المساعد مطفأ مؤقتاً (متوقف)"
+                    tvMasterStatus?.text = "🔴 الخطوط والثقوب مطفأة (OFF)"
                     tvMasterStatus?.setTextColor(Color.parseColor("#F87171"))
+                    cardMasterSwitch?.setBackgroundColor(Color.parseColor("#450A0A"))
                 }
             }
 
@@ -347,60 +352,100 @@ class AimOverlayService : Service(), SensorEventListener {
             val aspect = String.format("%.1f:9", maxPx.toFloat() / minPx.toFloat() * 9f)
             tvDisplayInfo?.text = "$maxPx×$minPx • $aspect • $dpi DPI • طاولة 2:1"
 
-            val btnCalibLeft = modMenuView?.findViewById<View>(R.id.btnCalibLeft)
-            val btnCalibRight = modMenuView?.findViewById<View>(R.id.btnCalibRight)
-            val btnCalibUp = modMenuView?.findViewById<View>(R.id.btnCalibUp)
-            val btnCalibDown = modMenuView?.findViewById<View>(R.id.btnCalibDown)
+            val switchShowCushions = modMenuView?.findViewById<SwitchCompat>(R.id.switchShowCushions)
+            switchShowCushions?.isChecked = canvasView?.showTableCushions ?: true
+            switchShowCushions?.setOnCheckedChangeListener { _, isChecked ->
+                canvasView?.let {
+                    it.showTableCushions = isChecked
+                    it.saveCalibration()
+                    it.postInvalidate()
+                }
+            }
+
+            // Table Zoom Slider (40% to 160%)
+            val seekTableZoom = modMenuView?.findViewById<SeekBar>(R.id.seekTableZoom)
+            val tvTableZoomPercent = modMenuView?.findViewById<TextView>(R.id.tvTableZoomPercent)
+            val btnCalibTableZoomMinus = modMenuView?.findViewById<View>(R.id.btnCalibTableZoomMinus)
+            val btnCalibTableZoomPlus = modMenuView?.findViewById<View>(R.id.btnCalibTableZoomPlus)
+
+            val initialZoom = canvasView?.tableZoom ?: 1.0f
+            seekTableZoom?.progress = ((initialZoom - 0.40f) * 100f).toInt().coerceIn(0, 120)
+            tvTableZoomPercent?.text = "🔍 حجم الطاولة والوسادات: ${(initialZoom * 100).toInt()}%"
+
+            seekTableZoom?.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+                override fun onProgressChanged(sb: SeekBar?, progress: Int, fromUser: Boolean) {
+                    val zoom = 0.40f + (progress / 100f)
+                    tvTableZoomPercent?.text = "🔍 حجم الطاولة والوسادات: ${(zoom * 100).toInt()}%"
+                    canvasView?.setTableZoomValue(zoom)
+                }
+                override fun onStartTrackingTouch(sb: SeekBar?) {}
+                override fun onStopTrackingTouch(sb: SeekBar?) {}
+            })
+
+            btnCalibTableZoomMinus?.setOnClickListener {
+                seekTableZoom?.let { sb -> sb.progress = (sb.progress - 4).coerceAtLeast(0) }
+            }
+            btnCalibTableZoomPlus?.setOnClickListener {
+                seekTableZoom?.let { sb -> sb.progress = (sb.progress + 4).coerceAtMost(120) }
+            }
+
+            // Pocket Size Slider (40% to 200%)
+            val seekPocketSize = modMenuView?.findViewById<SeekBar>(R.id.seekPocketSize)
+            val tvPocketSizePercent = modMenuView?.findViewById<TextView>(R.id.tvPocketSizePercent)
+            val btnCalibPocketMinus = modMenuView?.findViewById<View>(R.id.btnCalibPocketMinus)
+            val btnCalibPocketPlus = modMenuView?.findViewById<View>(R.id.btnCalibPocketPlus)
+
+            val initialPScale = canvasView?.pocketScale ?: 1.0f
+            seekPocketSize?.progress = ((initialPScale - 0.40f) * 100f).toInt().coerceIn(0, 160)
+            tvPocketSizePercent?.text = "🕳️ حجم فتحات الجيوب: ${(initialPScale * 100).toInt()}%"
+
+            seekPocketSize?.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+                override fun onProgressChanged(sb: SeekBar?, progress: Int, fromUser: Boolean) {
+                    val pScale = 0.40f + (progress / 100f)
+                    tvPocketSizePercent?.text = "🕳️ حجم فتحات الجيوب: ${(pScale * 100).toInt()}%"
+                    canvasView?.setPocketScaleValue(pScale)
+                }
+                override fun onStartTrackingTouch(sb: SeekBar?) {}
+                override fun onStopTrackingTouch(sb: SeekBar?) {}
+            })
+
+            btnCalibPocketMinus?.setOnClickListener {
+                seekPocketSize?.let { sb -> sb.progress = (sb.progress - 5).coerceAtLeast(0) }
+            }
+            btnCalibPocketPlus?.setOnClickListener {
+                seekPocketSize?.let { sb -> sb.progress = (sb.progress + 5).coerceAtMost(160) }
+            }
+
+            // Width and Height Fine-Tuning
             val btnCalibWidthPlus = modMenuView?.findViewById<View>(R.id.btnCalibWidthPlus)
             val btnCalibWidthMinus = modMenuView?.findViewById<View>(R.id.btnCalibWidthMinus)
             val btnCalibHeightPlus = modMenuView?.findViewById<View>(R.id.btnCalibHeightPlus)
             val btnCalibHeightMinus = modMenuView?.findViewById<View>(R.id.btnCalibHeightMinus)
+
+            btnCalibWidthPlus?.setOnClickListener { canvasView?.adjustCalibration(0f, 0f, 0.02f, 0f, 0f, 0f) }
+            btnCalibWidthMinus?.setOnClickListener { canvasView?.adjustCalibration(0f, 0f, -0.02f, 0f, 0f, 0f) }
+            btnCalibHeightPlus?.setOnClickListener { canvasView?.adjustCalibration(0f, 0f, 0f, 0.02f, 0f, 0f) }
+            btnCalibHeightMinus?.setOnClickListener { canvasView?.adjustCalibration(0f, 0f, 0f, -0.02f, 0f, 0f) }
+
+            // D-Pad Position Offsets
+            val btnCalibLeft = modMenuView?.findViewById<View>(R.id.btnCalibLeft)
+            val btnCalibRight = modMenuView?.findViewById<View>(R.id.btnCalibRight)
+            val btnCalibUp = modMenuView?.findViewById<View>(R.id.btnCalibUp)
+            val btnCalibDown = modMenuView?.findViewById<View>(R.id.btnCalibDown)
             val btnCalibReset = modMenuView?.findViewById<View>(R.id.btnCalibReset)
 
-            val btnCalibTableZoomIn = modMenuView?.findViewById<View>(R.id.btnCalibTableZoomIn)
-            val btnCalibTableZoomOut = modMenuView?.findViewById<View>(R.id.btnCalibTableZoomOut)
-            val btnCalibPocketMinus = modMenuView?.findViewById<View>(R.id.btnCalibPocketMinus)
-            val btnCalibPocketPlus = modMenuView?.findViewById<View>(R.id.btnCalibPocketPlus)
-            val tvPocketSize = modMenuView?.findViewById<TextView>(R.id.tvPocketSize)
-
-            canvasView?.let {
-                tvPocketSize?.text = "🕳️ حجم الثقوب: ${(it.pocketScale * 100).toInt()}%"
-            }
-
-            btnCalibLeft?.setOnClickListener { canvasView?.adjustCalibration(-4f, 0f, 0f, 0f, 0f) }
-            btnCalibRight?.setOnClickListener { canvasView?.adjustCalibration(4f, 0f, 0f, 0f, 0f) }
-            btnCalibUp?.setOnClickListener { canvasView?.adjustCalibration(0f, -4f, 0f, 0f, 0f) }
-            btnCalibDown?.setOnClickListener { canvasView?.adjustCalibration(0f, 4f, 0f, 0f, 0f) }
-            btnCalibWidthPlus?.setOnClickListener { canvasView?.adjustCalibration(0f, 0f, 0.008f, 0f, 0f) }
-            btnCalibWidthMinus?.setOnClickListener { canvasView?.adjustCalibration(0f, 0f, -0.008f, 0f, 0f) }
-            btnCalibHeightPlus?.setOnClickListener { canvasView?.adjustCalibration(0f, 0f, 0f, 0.008f, 0f) }
-            btnCalibHeightMinus?.setOnClickListener { canvasView?.adjustCalibration(0f, 0f, 0f, -0.008f, 0f) }
-
-            // Table Zoom In / Zoom Out (Proportional 2:1)
-            btnCalibTableZoomIn?.setOnClickListener {
-                canvasView?.adjustCalibration(0f, 0f, 0.012f, 0.012f, 0f)
-            }
-            btnCalibTableZoomOut?.setOnClickListener {
-                canvasView?.adjustCalibration(0f, 0f, -0.012f, -0.012f, 0f)
-            }
-
-            // Pocket Size Scaling
-            btnCalibPocketMinus?.setOnClickListener {
-                canvasView?.let {
-                    it.adjustCalibration(0f, 0f, 0f, 0f, -0.05f)
-                    tvPocketSize?.text = "🕳️ حجم الثقوب: ${(it.pocketScale * 100).toInt()}%"
-                }
-            }
-            btnCalibPocketPlus?.setOnClickListener {
-                canvasView?.let {
-                    it.adjustCalibration(0f, 0f, 0f, 0f, 0.05f)
-                    tvPocketSize?.text = "🕳️ حجم الثقوب: ${(it.pocketScale * 100).toInt()}%"
-                }
-            }
+            btnCalibLeft?.setOnClickListener { canvasView?.adjustCalibration(-5f, 0f, 0f, 0f, 0f, 0f) }
+            btnCalibRight?.setOnClickListener { canvasView?.adjustCalibration(5f, 0f, 0f, 0f, 0f, 0f) }
+            btnCalibUp?.setOnClickListener { canvasView?.adjustCalibration(0f, -5f, 0f, 0f, 0f, 0f) }
+            btnCalibDown?.setOnClickListener { canvasView?.adjustCalibration(0f, 5f, 0f, 0f, 0f, 0f) }
 
             btnCalibReset?.setOnClickListener {
                 canvasView?.resetCalibration()
-                tvPocketSize?.text = "🕳️ حجم الثقوب: 100%"
+                seekTableZoom?.progress = 60
+                seekPocketSize?.progress = 60
+                switchShowCushions?.isChecked = true
+                tvTableZoomPercent?.text = "🔍 حجم الطاولة والوسادات: 100%"
+                tvPocketSizePercent?.text = "🕳️ حجم فتحات الجيوب: 100%"
                 Toast.makeText(this, "تمت إعادة الضبط التلقائي للطاولة والجيوب", Toast.LENGTH_SHORT).show()
             }
 
@@ -460,15 +505,18 @@ class AimOverlayService : Service(), SensorEventListener {
         canvasView?.isMasterOverlayEnabled = overlayVisible
         aimTracker?.isAutoTrackingEnabled = overlayVisible
 
+        val cardMasterSwitch = modMenuView?.findViewById<View>(R.id.cardMasterSwitch)
         val switchMasterAim = modMenuView?.findViewById<SwitchCompat>(R.id.switchMasterAim)
         val tvMasterStatus = modMenuView?.findViewById<TextView>(R.id.tvMasterStatus)
         switchMasterAim?.isChecked = overlayVisible
         if (overlayVisible) {
-            tvMasterStatus?.text = "الخطوط والثقوب مشتعلة الآن (مفعل)"
+            tvMasterStatus?.text = "🟢 الخطوط والثقوب مشتعلة الآن (ON)"
             tvMasterStatus?.setTextColor(Color.parseColor("#A7F3D0"))
+            cardMasterSwitch?.setBackgroundColor(Color.parseColor("#14532D"))
         } else {
-            tvMasterStatus?.text = "المساعد مطفأ مؤقتاً (متوقف)"
+            tvMasterStatus?.text = "🔴 الخطوط والثقوب مطفأة (OFF)"
             tvMasterStatus?.setTextColor(Color.parseColor("#F87171"))
+            cardMasterSwitch?.setBackgroundColor(Color.parseColor("#450A0A"))
         }
         canvasView?.postInvalidate()
     }

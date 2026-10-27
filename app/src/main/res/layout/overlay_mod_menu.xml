@@ -106,12 +106,13 @@
                 android:layout_height="wrap_content"
                 android:orientation="vertical">
 
-                <!-- 0. MASTER ON / OFF SWITCH (تشغيل/إطفاء المساعد بالكامل) -->
+                <!-- 0. MASTER ON / OFF SWITCH (تشغيل/إطفاء المساعد بالكامل مع إبقاء التطبيق شغال) -->
                 <RelativeLayout
+                    android:id="@+id/cardMasterSwitch"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:background="#2E1065"
-                    android:padding="8dp"
+                    android:background="#14532D"
+                    android:padding="10dp"
                     android:layout_marginBottom="10dp">
 
                     <LinearLayout
@@ -124,18 +125,19 @@
                         <TextView
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:text="🔘 مفتاح التشغيل والإطفاء (ON/OFF)"
-                            android:textColor="@color/laser_cyan"
-                            android:textSize="12sp"
+                            android:text="🔘 مفتاح المساعد (Master ON / OFF)"
+                            android:textColor="@color/white"
+                            android:textSize="13sp"
                             android:textStyle="bold" />
 
                         <TextView
                             android:id="@+id/tvMasterStatus"
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:text="الخطوط والثقوب مشتعلة الآن (مفعل)"
+                            android:text="🟢 الخطوط والثقوب مشتعلة الآن (ON)"
                             android:textColor="#A7F3D0"
-                            android:textSize="10sp" />
+                            android:textSize="11sp"
+                            android:textStyle="bold" />
                     </LinearLayout>
 
                     <androidx.appcompat.widget.SwitchCompat
@@ -460,49 +462,58 @@
                         android:background="#33FFFFFF" />
                 </LinearLayout>
 
-                <!-- Table Scale Zoom In / Zoom Out (2:1 Proportional) -->
-                <LinearLayout
+                <!-- Toggle Show Table Cushions -->
+                <RelativeLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:orientation="horizontal"
-                    android:gravity="center"
-                    android:layout_marginBottom="4dp">
-
-                    <TextView
-                        android:id="@+id/btnCalibTableZoomIn"
-                        android:layout_width="0dp"
-                        android:layout_height="28dp"
-                        android:layout_weight="1"
-                        android:text="🔍➕ تكبير الطاولة"
-                        android:textColor="@color/white"
-                        android:textSize="10sp"
-                        android:gravity="center"
-                        android:background="#2E2055"
-                        android:layout_marginEnd="4dp" />
-
-                    <TextView
-                        android:id="@+id/btnCalibTableZoomOut"
-                        android:layout_width="0dp"
-                        android:layout_height="28dp"
-                        android:layout_weight="1"
-                        android:text="🔍➖ تصغير الطاولة"
-                        android:textColor="@color/white"
-                        android:textSize="10sp"
-                        android:gravity="center"
-                        android:background="#2E2055" />
-                </LinearLayout>
-
-                <!-- Pocket Size Stepper (تكبير وتصغير حجم الثقوب) -->
-                <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:orientation="horizontal"
-                    android:gravity="center"
                     android:layout_marginBottom="6dp">
 
                     <TextView
-                        android:id="@+id/btnCalibPocketMinus"
-                        android:layout_width="32dp"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="📐 إظهار وسادات الطاولة (Cushion Rails)"
+                        android:textColor="@color/white"
+                        android:textSize="11sp"
+                        android:layout_alignParentStart="true"
+                        android:layout_centerVertical="true" />
+
+                    <androidx.appcompat.widget.SwitchCompat
+                        android:id="@+id/switchShowCushions"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:checked="true"
+                        android:layout_alignParentEnd="true"
+                        android:layout_centerVertical="true" />
+                </RelativeLayout>
+
+                <!-- Table Scale Zoom SeekBar (تكبير وتصغير الطاولة) -->
+                <RelativeLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="2dp"
+                    android:layout_marginBottom="2dp">
+
+                    <TextView
+                        android:id="@+id/tvTableZoomPercent"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="🔍 حجم الطاولة والوسادات: 100%"
+                        android:textColor="@color/laser_cyan"
+                        android:textSize="11sp"
+                        android:textStyle="bold"
+                        android:layout_alignParentStart="true" />
+                </RelativeLayout>
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical"
+                    android:layout_marginBottom="6dp">
+
+                    <TextView
+                        android:id="@+id/btnCalibTableZoomMinus"
+                        android:layout_width="28dp"
                         android:layout_height="28dp"
                         android:text="➖"
                         android:textColor="@color/white"
@@ -510,21 +521,71 @@
                         android:gravity="center"
                         android:background="#33FFFFFF" />
 
-                    <TextView
-                        android:id="@+id/tvPocketSize"
+                    <SeekBar
+                        android:id="@+id/seekTableZoom"
                         android:layout_width="0dp"
-                        android:layout_height="28dp"
+                        android:layout_height="wrap_content"
                         android:layout_weight="1"
-                        android:text="🕳️ حجم الثقوب: 100%"
-                        android:textColor="@color/laser_yellow"
-                        android:textSize="10sp"
-                        android:textStyle="bold"
+                        android:max="120"
+                        android:progress="60" />
+
+                    <TextView
+                        android:id="@+id/btnCalibTableZoomPlus"
+                        android:layout_width="28dp"
+                        android:layout_height="28dp"
+                        android:text="➕"
+                        android:textColor="@color/white"
+                        android:textSize="12sp"
                         android:gravity="center"
-                        android:background="#1E293B" />
+                        android:background="#33FFFFFF" />
+                </LinearLayout>
+
+                <!-- Pocket Size SeekBar (تكبير وتصغير حجم الثقوب والجيوب) -->
+                <RelativeLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="2dp"
+                    android:layout_marginBottom="2dp">
+
+                    <TextView
+                        android:id="@+id/tvPocketSizePercent"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="🕳️ حجم فتحات الجيوب: 100%"
+                        android:textColor="@color/laser_yellow"
+                        android:textSize="11sp"
+                        android:textStyle="bold"
+                        android:layout_alignParentStart="true" />
+                </RelativeLayout>
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical"
+                    android:layout_marginBottom="8dp">
+
+                    <TextView
+                        android:id="@+id/btnCalibPocketMinus"
+                        android:layout_width="28dp"
+                        android:layout_height="28dp"
+                        android:text="➖"
+                        android:textColor="@color/white"
+                        android:textSize="12sp"
+                        android:gravity="center"
+                        android:background="#33FFFFFF" />
+
+                    <SeekBar
+                        android:id="@+id/seekPocketSize"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:max="160"
+                        android:progress="60" />
 
                     <TextView
                         android:id="@+id/btnCalibPocketPlus"
-                        android:layout_width="32dp"
+                        android:layout_width="28dp"
                         android:layout_height="28dp"
                         android:text="➕"
                         android:textColor="@color/white"

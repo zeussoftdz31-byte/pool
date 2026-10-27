@@ -130,9 +130,21 @@ class AimCanvasView(context: Context) : View(context) {
     }
 
     private val pocketMarkerPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = Color.argb(45, 255, 255, 255)
+        color = Color.parseColor("#E0FFD600") // Vivid Gold Neon
         style = Paint.Style.STROKE
-        strokeWidth = 2f
+        strokeWidth = 3.5f
+    }
+
+    private val pocketInnerFillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = Color.parseColor("#44000000") // Dark translucent hole center
+        style = Paint.Style.FILL
+    }
+
+    private val cushionBorderPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = Color.parseColor("#AA00E5FF") // Glowing Laser Cyan Cushions
+        style = Paint.Style.STROKE
+        strokeWidth = 3f
+        pathEffect = DashPathEffect(floatArrayOf(16f, 8f), 0f)
     }
 
     private val pocketGuidePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
@@ -178,9 +190,11 @@ class AimCanvasView(context: Context) : View(context) {
     // Device & Calibration Adjustments (Persistent via SharedPreferences)
     var offsetX = 0f
     var offsetY = 0f
+    var tableZoom = 1.0f
     var tableScaleX = 1.0f
     var tableScaleY = 1.0f
     var pocketScale = 1.0f
+    var showTableCushions = true
 
     private var viewWidth = 0
     private var viewHeight = 0
@@ -194,9 +208,11 @@ class AimCanvasView(context: Context) : View(context) {
             val prefs = context.getSharedPreferences("pool_wizard_calibration", Context.MODE_PRIVATE)
             offsetX = prefs.getFloat("offset_x", 0f)
             offsetY = prefs.getFloat("offset_y", 0f)
+            tableZoom = prefs.getFloat("table_zoom", 1.0f)
             tableScaleX = prefs.getFloat("scale_x", 1.0f)
             tableScaleY = prefs.getFloat("scale_y", 1.0f)
             pocketScale = prefs.getFloat("pocket_scale", 1.0f)
+            showTableCushions = prefs.getBoolean("show_cushions", true)
         } catch (e: Exception) {
             e.printStackTrace()
         }
@@ -208,9 +224,11 @@ class AimCanvasView(context: Context) : View(context) {
             prefs.edit()
                 .putFloat("offset_x", offsetX)
                 .putFloat("offset_y", offsetY)
+                .putFloat("table_zoom", tableZoom)
                 .putFloat("scale_x", tableScaleX)
                 .putFloat("scale_y", tableScaleY)
                 .putFloat("pocket_scale", pocketScale)
+                .putBoolean("show_cushions", showTableCushions)
                 .apply()
         } catch (e: Exception) {
             e.printStackTrace()
@@ -222,13 +240,45 @@ class AimCanvasView(context: Context) : View(context) {
         dOffsetY: Float,
         dScaleX: Float,
         dScaleY: Float = 0f,
-        dPocketScale: Float = 0f
+        dPocketScale: Float = 0f,
+        dTableZoom: Float = 0f
     ) {
         offsetX += dOffsetX
         offsetY += dOffsetY
-        tableScaleX = (tableScaleX + dScaleX).coerceIn(0.50f, 1.60f)
-        tableScaleY = (tableScaleY + dScaleY).coerceIn(0.50f, 1.60f)
-        pocketScale = (pocketScale + dPocketScale).coerceIn(0.50f, 1.80f)
+        tableScaleX = (tableScaleX + dScaleX).coerceIn(0.40f, 1.80f)
+        tableScaleY = (tableScaleY + dScaleY).coerceIn(0.40f, 1.80f)
+        pocketScale = (pocketScale + dPocketScale).coerceIn(0.40f, 2.50f)
+        tableZoom = (tableZoom + dTableZoom).coerceIn(0.35f, 1.70f)
+        saveCalibration()
+        if (viewWidth > 0 && viewHeight > 0) {
+            recalculateTableBounds(viewWidth, viewHeight)
+        }
+    }
+
+    fun setTableZoomValue(zoom: Float) {
+        tableZoom = zoom.coerceIn(0.35f, 1.70f)
+        saveCalibration()
+        if (viewWidth > 0 && viewHeight > 0) {
+            recalculateTableBounds(viewWidth, viewHeight)
+        }
+    }
+
+    fun setPocketScaleValue(scale: Float) {
+        pocketScale = scale.coerceIn(0.40f, 2.50f)
+        saveCalibration()
+        postInvalidate()
+    }
+
+    fun setTableWidthScale(scale: Float) {
+        tableScaleX = scale.coerceIn(0.40f, 1.80f)
+        saveCalibration()
+        if (viewWidth > 0 && viewHeight > 0) {
+            recalculateTableBounds(viewWidth, viewHeight)
+        }
+    }
+
+    fun setTableHeightScale(scale: Float) {
+        tableScaleY = scale.coerceIn(0.40f, 1.80f)
         saveCalibration()
         if (viewWidth > 0 && viewHeight > 0) {
             recalculateTableBounds(viewWidth, viewHeight)
@@ -238,9 +288,11 @@ class AimCanvasView(context: Context) : View(context) {
     fun resetCalibration() {
         offsetX = 0f
         offsetY = 0f
+        tableZoom = 1.0f
         tableScaleX = 1.0f
         tableScaleY = 1.0f
         pocketScale = 1.0f
+        showTableCushions = true
         saveCalibration()
         if (viewWidth > 0 && viewHeight > 0) {
             recalculateTableBounds(viewWidth, viewHeight)
@@ -261,16 +313,15 @@ class AimCanvasView(context: Context) : View(context) {
         val screenW = if (isLandscape) w.toFloat() else h.toFloat()
         val screenH = if (isLandscape) h.toFloat() else w.toFloat()
 
-        // 8 Ball Pool table playfield has an exact aspect ratio of 2.0 : 1.0
-        // Playable table height occupies ~78.2% of landscape screen height
-        // Leaving ~13.6% at the top for player avatars/timer, and ~8.2% at the bottom
-        val tableH = screenH * 0.782f * tableScaleY
+        // 8 Ball Pool table playfield: base height occupies ~75% of landscape screen height
+        // tableZoom allows scaling down to 35% or up to 170%
+        val tableH = screenH * 0.75f * tableScaleY * tableZoom
         val tableW = tableH * 2.0f * tableScaleX
 
-        // Horizontally centered across the physical display with offset calibration
+        // Horizontally and vertically centered across the physical display with offset calibration
         val tableLeft = (screenW - tableW) / 2f + offsetX
         val tableRight = tableLeft + tableW
-        val tableTop = screenH * 0.136f + offsetY
+        val tableTop = (screenH - tableH) / 2f + offsetY
         val tableBottom = tableTop + tableH
 
         tableBounds.set(tableLeft, tableTop, tableRight, tableBottom)
@@ -382,9 +433,17 @@ class AimCanvasView(context: Context) : View(context) {
             drawCalibrationOverlay(canvas)
         }
 
-        // 1. Draw Pockets Rim (Scales with table and pocketScale)
+        // 1. Draw Table Cushions (Rails where bank shots bounce!)
+        if (showTableCushions || isCalibrationModeActive) {
+            canvas.drawRect(tableBounds, cushionBorderPaint)
+        }
+
+        // 2. Draw 6 Pockets Rim (Scales with table and pocketScale)
+        val pocketVisualRadius = ballRadius * 1.55f * pocketScale
         for (p in pockets) {
-            canvas.drawCircle(p.x, p.y, ballRadius * 1.5f * pocketScale, pocketMarkerPaint)
+            canvas.drawCircle(p.x, p.y, pocketVisualRadius, pocketInnerFillPaint)
+            canvas.drawCircle(p.x, p.y, pocketVisualRadius, pocketMarkerPaint)
+            canvas.drawCircle(p.x, p.y, 4f, pocketMarkerPaint)
         }
 
         val dirX = cos(aimAngleRad.toDouble()).toFloat()
