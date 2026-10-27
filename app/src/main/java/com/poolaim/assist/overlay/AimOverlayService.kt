@@ -254,16 +254,144 @@ class AimOverlayService : Service(), SensorEventListener {
                 layoutCollapsedBadge?.visibility = View.VISIBLE
             }
 
-            val cardMasterSwitch = modMenuView?.findViewById<View>(R.id.cardMasterSwitch)
+            // ========================================================
+            // WIZARD iOS TAB NAVIGATION
+            // ========================================================
+            val btnTabVisuals = modMenuView?.findViewById<View>(R.id.btnTabVisuals)
+            val btnTabAimMenu = modMenuView?.findViewById<View>(R.id.btnTabAimMenu)
+            val btnTabSettings = modMenuView?.findViewById<View>(R.id.btnTabSettings)
+
+            val tvTabVisualsText = modMenuView?.findViewById<TextView>(R.id.tvTabVisualsText)
+            val tvTabAimText = modMenuView?.findViewById<TextView>(R.id.tvTabAimText)
+            val tvTabSettingsText = modMenuView?.findViewById<TextView>(R.id.tvTabSettingsText)
+
+            val layoutContentAim = modMenuView?.findViewById<View>(R.id.layoutContentAim)
+            val layoutContentVisuals = modMenuView?.findViewById<View>(R.id.layoutContentVisuals)
+            val layoutContentSettings = modMenuView?.findViewById<View>(R.id.layoutContentSettings)
+            val tvCurrentTabTitle = modMenuView?.findViewById<TextView>(R.id.tvCurrentTabTitle)
+
+            fun switchTab(tabIndex: Int) {
+                btnTabVisuals?.setBackgroundResource(0)
+                btnTabAimMenu?.setBackgroundResource(0)
+                btnTabSettings?.setBackgroundResource(0)
+
+                tvTabVisualsText?.setTextColor(Color.parseColor("#94A3B8"))
+                tvTabAimText?.setTextColor(Color.parseColor("#94A3B8"))
+                tvTabSettingsText?.setTextColor(Color.parseColor("#94A3B8"))
+
+                layoutContentAim?.visibility = View.GONE
+                layoutContentVisuals?.visibility = View.GONE
+                layoutContentSettings?.visibility = View.GONE
+
+                when (tabIndex) {
+                    0 -> { // Visuals
+                        btnTabVisuals?.setBackgroundResource(R.drawable.bg_tab_active)
+                        tvTabVisualsText?.setTextColor(Color.parseColor("#38BDF8"))
+                        layoutContentVisuals?.visibility = View.VISIBLE
+                        tvCurrentTabTitle?.text = "Visuals"
+                    }
+                    1 -> { // Aim Menu
+                        btnTabAimMenu?.setBackgroundResource(R.drawable.bg_tab_active)
+                        tvTabAimText?.setTextColor(Color.parseColor("#38BDF8"))
+                        layoutContentAim?.visibility = View.VISIBLE
+                        tvCurrentTabTitle?.text = "Aim"
+                    }
+                    2 -> { // Settings
+                        btnTabSettings?.setBackgroundResource(R.drawable.bg_tab_active)
+                        tvTabSettingsText?.setTextColor(Color.parseColor("#38BDF8"))
+                        layoutContentSettings?.visibility = View.VISIBLE
+                        tvCurrentTabTitle?.text = "Settings"
+                    }
+                }
+            }
+
+            btnTabVisuals?.setOnClickListener { switchTab(0) }
+            btnTabAimMenu?.setOnClickListener { switchTab(1) }
+            btnTabSettings?.setOnClickListener { switchTab(2) }
+
+            // ========================================================
+            // TAB 1: AIM MENU CONTROLS
+            // ========================================================
+            val switchAutoAim = modMenuView?.findViewById<SwitchCompat>(R.id.switchAutoAim)
+            val switchAimToggleIcon = modMenuView?.findViewById<SwitchCompat>(R.id.switchAimToggleIcon)
+            val switchAutoPlay = modMenuView?.findViewById<SwitchCompat>(R.id.switchAutoPlay)
+            val switchNominatePocket = modMenuView?.findViewById<SwitchCompat>(R.id.switchNominatePocket)
+            val seekAimPower = modMenuView?.findViewById<SeekBar>(R.id.seekAimPower)
+            val tvAimPowerVal = modMenuView?.findViewById<TextView>(R.id.tvAimPowerVal)
+
+            switchAutoAim?.setOnCheckedChangeListener { _, isChecked ->
+                canvasView?.let {
+                    it.isMasterOverlayEnabled = isChecked
+                    it.visibility = if (isChecked) View.VISIBLE else View.GONE
+                    it.postInvalidate()
+                }
+                aimTracker?.isAutoTrackingEnabled = isChecked
+            }
+
+            switchAimToggleIcon?.setOnCheckedChangeListener { _, isChecked ->
+                layoutCollapsedBadge?.visibility = if (isChecked) View.VISIBLE else View.GONE
+            }
+
+            val initialPower = canvasView?.shotPowerPercent ?: 0.85f
+            seekAimPower?.progress = (initialPower * 100).toInt()
+            tvAimPowerVal?.text = String.format("%.2f", initialPower)
+
+            seekAimPower?.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+                override fun onProgressChanged(sb: SeekBar?, progress: Int, fromUser: Boolean) {
+                    val p = (progress / 100f).coerceIn(0.15f, 1.0f)
+                    tvAimPowerVal?.text = String.format("%.2f", p)
+                    canvasView?.shotPowerPercent = p
+                    canvasView?.postInvalidate()
+                }
+                override fun onStartTrackingTouch(sb: SeekBar?) {}
+                override fun onStopTrackingTouch(sb: SeekBar?) {}
+            })
+
+            // ========================================================
+            // TAB 2: VISUALS (Table Zoom & Pocket Scaling)
+            // ========================================================
+            val seekTableZoom = modMenuView?.findViewById<SeekBar>(R.id.seekTableZoom)
+            val tvTableZoomVal = modMenuView?.findViewById<TextView>(R.id.tvTableZoomVal)
+            val seekPocketSize = modMenuView?.findViewById<SeekBar>(R.id.seekPocketSize)
+            val tvPocketSizeVal = modMenuView?.findViewById<TextView>(R.id.tvPocketSizeVal)
+            val switchShowCushions = modMenuView?.findViewById<SwitchCompat>(R.id.switchShowCushions)
             val switchMasterAim = modMenuView?.findViewById<SwitchCompat>(R.id.switchMasterAim)
-            val tvMasterStatus = modMenuView?.findViewById<TextView>(R.id.tvMasterStatus)
-            val switchCalibrationMode = modMenuView?.findViewById<SwitchCompat>(R.id.switchCalibrationMode)
 
-            val btnPowerMinus = modMenuView?.findViewById<View>(R.id.btnPowerMinus)
-            val btnPowerPlus = modMenuView?.findViewById<View>(R.id.btnPowerPlus)
-            val tvPowerPercent = modMenuView?.findViewById<TextView>(R.id.tvPowerPercent)
+            val initialZoom = canvasView?.tableZoom ?: 1.0f
+            seekTableZoom?.progress = ((initialZoom - 0.35f) * 100f).toInt().coerceIn(0, 135)
+            tvTableZoomVal?.text = "${(initialZoom * 100).toInt()}%"
 
-            // Master ON/OFF Switch (Toggle with instant effect)
+            seekTableZoom?.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+                override fun onProgressChanged(sb: SeekBar?, progress: Int, fromUser: Boolean) {
+                    val zoom = 0.35f + (progress / 100f)
+                    tvTableZoomVal?.text = "${(zoom * 100).toInt()}%"
+                    canvasView?.setTableZoomValue(zoom)
+                }
+                override fun onStartTrackingTouch(sb: SeekBar?) {}
+                override fun onStopTrackingTouch(sb: SeekBar?) {}
+            })
+
+            val initialPocketScale = canvasView?.pocketScale ?: 1.0f
+            seekPocketSize?.progress = ((initialPocketScale - 0.40f) * 100f).toInt().coerceIn(0, 210)
+            tvPocketSizeVal?.text = "${(initialPocketScale * 100).toInt()}%"
+
+            seekPocketSize?.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+                override fun onProgressChanged(sb: SeekBar?, progress: Int, fromUser: Boolean) {
+                    val pScale = 0.40f + (progress / 100f)
+                    tvPocketSizeVal?.text = "${(pScale * 100).toInt()}%"
+                    canvasView?.setPocketScaleValue(pScale)
+                }
+                override fun onStartTrackingTouch(sb: SeekBar?) {}
+                override fun onStopTrackingTouch(sb: SeekBar?) {}
+            })
+
+            switchShowCushions?.isChecked = canvasView?.showTableCushions ?: true
+            switchShowCushions?.setOnCheckedChangeListener { _, isChecked ->
+                canvasView?.showTableCushions = isChecked
+                canvasView?.saveCalibration()
+                canvasView?.postInvalidate()
+            }
+
             switchMasterAim?.setOnCheckedChangeListener { _, isChecked ->
                 canvasView?.let {
                     it.isMasterOverlayEnabled = isChecked
@@ -271,193 +399,45 @@ class AimOverlayService : Service(), SensorEventListener {
                     it.postInvalidate()
                 }
                 aimTracker?.isAutoTrackingEnabled = isChecked
-                if (isChecked) {
-                    tvMasterStatus?.text = "🟢 الخطوط والثقوب مشتعلة الآن (ON)"
-                    tvMasterStatus?.setTextColor(Color.parseColor("#A7F3D0"))
-                    cardMasterSwitch?.setBackgroundColor(Color.parseColor("#14532D"))
-                } else {
-                    tvMasterStatus?.text = "🔴 الخطوط والثقوب مطفأة (OFF)"
-                    tvMasterStatus?.setTextColor(Color.parseColor("#F87171"))
-                    cardMasterSwitch?.setBackgroundColor(Color.parseColor("#450A0A"))
-                }
             }
 
-            // Interactive Calibration Mode
-            switchCalibrationMode?.setOnCheckedChangeListener { _, isChecked ->
-                canvasView?.let {
-                    it.isCalibrationModeActive = isChecked
-                    it.postInvalidate()
-                }
-            }
-
-            // Power Steppers
-            btnPowerMinus?.setOnClickListener {
-                canvasView?.let {
-                    it.shotPowerPercent = (it.shotPowerPercent - 0.05f).coerceIn(0.15f, 1.0f)
-                    tvPowerPercent?.text = "جهد الضربة: ${(it.shotPowerPercent * 100).toInt()}%"
-                    it.postInvalidate()
-                }
-            }
-
-            btnPowerPlus?.setOnClickListener {
-                canvasView?.let {
-                    it.shotPowerPercent = (it.shotPowerPercent + 0.05f).coerceIn(0.15f, 1.0f)
-                    tvPowerPercent?.text = "جهد الضربة: ${(it.shotPowerPercent * 100).toInt()}%"
-                    it.postInvalidate()
-                }
-            }
-
-            // Mod Menu Feature Toggles
-            switchPowerSimulation?.setOnCheckedChangeListener { _, isChecked ->
-                canvasView?.let {
-                    it.enablePowerSimulation = isChecked
-                    it.postInvalidate()
-                }
-            }
-
-            switchBankShots?.setOnCheckedChangeListener { _, isChecked ->
-                canvasView?.let {
-                    it.enableBankShots = isChecked
-                    it.postInvalidate()
-                }
-            }
-
-            switchCueBallPath?.setOnCheckedChangeListener { _, isChecked ->
-                canvasView?.let {
-                    it.enableCueBallPath = isChecked
-                    it.postInvalidate()
-                }
-            }
-
-            switch6Pockets?.setOnCheckedChangeListener { _, isChecked ->
-                canvasView?.let {
-                    it.showPocketGuides = isChecked
-                    it.postInvalidate()
-                }
-            }
-
-            switchPocketGlow?.setOnCheckedChangeListener { _, isChecked ->
-                canvasView?.let {
-                    it.enablePocketGlow = isChecked
-                    it.postInvalidate()
-                }
-            }
-
-            // Display Info & Calibration (DPI, Resolution, Aspect Ratio)
-            val tvDisplayInfo = modMenuView?.findViewById<TextView>(R.id.tvDisplayInfo)
-            val dm = resources.displayMetrics
-            val maxPx = maxOf(dm.widthPixels, dm.heightPixels)
-            val minPx = minOf(dm.widthPixels, dm.heightPixels)
-            val dpi = dm.densityDpi
-            val aspect = String.format("%.1f:9", maxPx.toFloat() / minPx.toFloat() * 9f)
-            tvDisplayInfo?.text = "$maxPx×$minPx • $aspect • $dpi DPI • طاولة 2:1"
-
-            val switchShowCushions = modMenuView?.findViewById<SwitchCompat>(R.id.switchShowCushions)
-            switchShowCushions?.isChecked = canvasView?.showTableCushions ?: true
-            switchShowCushions?.setOnCheckedChangeListener { _, isChecked ->
-                canvasView?.let {
-                    it.showTableCushions = isChecked
-                    it.saveCalibration()
-                    it.postInvalidate()
-                }
-            }
-
-            // Table Zoom Slider (40% to 160%)
-            val seekTableZoom = modMenuView?.findViewById<SeekBar>(R.id.seekTableZoom)
-            val tvTableZoomPercent = modMenuView?.findViewById<TextView>(R.id.tvTableZoomPercent)
-            val btnCalibTableZoomMinus = modMenuView?.findViewById<View>(R.id.btnCalibTableZoomMinus)
-            val btnCalibTableZoomPlus = modMenuView?.findViewById<View>(R.id.btnCalibTableZoomPlus)
-
-            val initialZoom = canvasView?.tableZoom ?: 1.0f
-            seekTableZoom?.progress = ((initialZoom - 0.40f) * 100f).toInt().coerceIn(0, 120)
-            tvTableZoomPercent?.text = "🔍 حجم الطاولة والوسادات: ${(initialZoom * 100).toInt()}%"
-
-            seekTableZoom?.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
-                override fun onProgressChanged(sb: SeekBar?, progress: Int, fromUser: Boolean) {
-                    val zoom = 0.40f + (progress / 100f)
-                    tvTableZoomPercent?.text = "🔍 حجم الطاولة والوسادات: ${(zoom * 100).toInt()}%"
-                    canvasView?.setTableZoomValue(zoom)
-                }
-                override fun onStartTrackingTouch(sb: SeekBar?) {}
-                override fun onStopTrackingTouch(sb: SeekBar?) {}
-            })
-
-            btnCalibTableZoomMinus?.setOnClickListener {
-                seekTableZoom?.let { sb -> sb.progress = (sb.progress - 4).coerceAtLeast(0) }
-            }
-            btnCalibTableZoomPlus?.setOnClickListener {
-                seekTableZoom?.let { sb -> sb.progress = (sb.progress + 4).coerceAtMost(120) }
-            }
-
-            // Pocket Size Slider (40% to 200%)
-            val seekPocketSize = modMenuView?.findViewById<SeekBar>(R.id.seekPocketSize)
-            val tvPocketSizePercent = modMenuView?.findViewById<TextView>(R.id.tvPocketSizePercent)
-            val btnCalibPocketMinus = modMenuView?.findViewById<View>(R.id.btnCalibPocketMinus)
-            val btnCalibPocketPlus = modMenuView?.findViewById<View>(R.id.btnCalibPocketPlus)
-
-            val initialPScale = canvasView?.pocketScale ?: 1.0f
-            seekPocketSize?.progress = ((initialPScale - 0.40f) * 100f).toInt().coerceIn(0, 160)
-            tvPocketSizePercent?.text = "🕳️ حجم فتحات الجيوب: ${(initialPScale * 100).toInt()}%"
-
-            seekPocketSize?.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
-                override fun onProgressChanged(sb: SeekBar?, progress: Int, fromUser: Boolean) {
-                    val pScale = 0.40f + (progress / 100f)
-                    tvPocketSizePercent?.text = "🕳️ حجم فتحات الجيوب: ${(pScale * 100).toInt()}%"
-                    canvasView?.setPocketScaleValue(pScale)
-                }
-                override fun onStartTrackingTouch(sb: SeekBar?) {}
-                override fun onStopTrackingTouch(sb: SeekBar?) {}
-            })
-
-            btnCalibPocketMinus?.setOnClickListener {
-                seekPocketSize?.let { sb -> sb.progress = (sb.progress - 5).coerceAtLeast(0) }
-            }
-            btnCalibPocketPlus?.setOnClickListener {
-                seekPocketSize?.let { sb -> sb.progress = (sb.progress + 5).coerceAtMost(160) }
-            }
-
-            // Width and Height Fine-Tuning
-            val btnCalibWidthPlus = modMenuView?.findViewById<View>(R.id.btnCalibWidthPlus)
-            val btnCalibWidthMinus = modMenuView?.findViewById<View>(R.id.btnCalibWidthMinus)
-            val btnCalibHeightPlus = modMenuView?.findViewById<View>(R.id.btnCalibHeightPlus)
-            val btnCalibHeightMinus = modMenuView?.findViewById<View>(R.id.btnCalibHeightMinus)
-
-            btnCalibWidthPlus?.setOnClickListener { canvasView?.adjustCalibration(0f, 0f, 0.02f, 0f, 0f, 0f) }
-            btnCalibWidthMinus?.setOnClickListener { canvasView?.adjustCalibration(0f, 0f, -0.02f, 0f, 0f, 0f) }
-            btnCalibHeightPlus?.setOnClickListener { canvasView?.adjustCalibration(0f, 0f, 0f, 0.02f, 0f, 0f) }
-            btnCalibHeightMinus?.setOnClickListener { canvasView?.adjustCalibration(0f, 0f, 0f, -0.02f, 0f, 0f) }
-
-            // D-Pad Position Offsets
+            // ========================================================
+            // TAB 3: SETTINGS & CALIBRATION
+            // ========================================================
+            val switchBankShots = modMenuView?.findViewById<SwitchCompat>(R.id.switchBankShots)
+            val switchCueBallPath = modMenuView?.findViewById<SwitchCompat>(R.id.switchCueBallPath)
             val btnCalibLeft = modMenuView?.findViewById<View>(R.id.btnCalibLeft)
             val btnCalibRight = modMenuView?.findViewById<View>(R.id.btnCalibRight)
             val btnCalibUp = modMenuView?.findViewById<View>(R.id.btnCalibUp)
             val btnCalibDown = modMenuView?.findViewById<View>(R.id.btnCalibDown)
-            val btnCalibReset = modMenuView?.findViewById<View>(R.id.btnCalibReset)
+            val btnResetCalib = modMenuView?.findViewById<View>(R.id.btnResetCalib)
+            val btnCloseMod = modMenuView?.findViewById<View>(R.id.btnCloseMod)
+
+            switchBankShots?.setOnCheckedChangeListener { _, isChecked ->
+                canvasView?.enableBankShots = isChecked
+                canvasView?.postInvalidate()
+            }
+
+            switchCueBallPath?.setOnCheckedChangeListener { _, isChecked ->
+                canvasView?.enableCueBallPath = isChecked
+                canvasView?.postInvalidate()
+            }
 
             btnCalibLeft?.setOnClickListener { canvasView?.adjustCalibration(-5f, 0f, 0f, 0f, 0f, 0f) }
             btnCalibRight?.setOnClickListener { canvasView?.adjustCalibration(5f, 0f, 0f, 0f, 0f, 0f) }
             btnCalibUp?.setOnClickListener { canvasView?.adjustCalibration(0f, -5f, 0f, 0f, 0f, 0f) }
             btnCalibDown?.setOnClickListener { canvasView?.adjustCalibration(0f, 5f, 0f, 0f, 0f, 0f) }
 
-            btnCalibReset?.setOnClickListener {
+            btnResetCalib?.setOnClickListener {
                 canvasView?.resetCalibration()
-                seekTableZoom?.progress = 60
+                seekTableZoom?.progress = 65
                 seekPocketSize?.progress = 60
                 switchShowCushions?.isChecked = true
-                tvTableZoomPercent?.text = "🔍 حجم الطاولة والوسادات: 100%"
-                tvPocketSizePercent?.text = "🕳️ حجم فتحات الجيوب: 100%"
-                Toast.makeText(this, "تمت إعادة الضبط التلقائي للطاولة والجيوب", Toast.LENGTH_SHORT).show()
+                tvTableZoomVal?.text = "100%"
+                tvPocketSizeVal?.text = "100%"
+                Toast.makeText(this, "تمت إعادة ضبط الطاولة والجيوب بنجاح", Toast.LENGTH_SHORT).show()
             }
 
-            // Laser Color Themes
-            btnThemeGreen?.setOnClickListener { canvasView?.setThemeColor(0) }
-            btnThemeCyan?.setOnClickListener { canvasView?.setThemeColor(1) }
-            btnThemeGold?.setOnClickListener { canvasView?.setThemeColor(2) }
-            btnThemeRed?.setOnClickListener { canvasView?.setThemeColor(3) }
-
-            // Visibility & Close
-            btnQuickToggleLines?.setOnClickListener { toggleOverlayVisibility() }
-            btnToggleVisibility?.setOnClickListener { toggleOverlayVisibility() }
             btnCloseMod?.setOnClickListener { stopSelf() }
 
             windowManager.addView(modMenuView, params)
@@ -478,6 +458,13 @@ class AimOverlayService : Service(), SensorEventListener {
         }
     }
 
+    private var isModMenuWindowVisible = true
+
+    fun toggleModMenuWindowVisibility() {
+        isModMenuWindowVisible = !isModMenuWindowVisible
+        modMenuView?.visibility = if (isModMenuWindowVisible) View.VISIBLE else View.GONE
+    }
+
     override fun onSensorChanged(event: SensorEvent?) {
         if (event == null) return
         val x = event.values[0]
@@ -489,9 +476,10 @@ class AimOverlayService : Service(), SensorEventListener {
         val delta = accelCurrent - accelLast
         accel = accel * 0.9f + delta
 
+        // خاصية الهز لإخفاء وإظهار نافذة المود منيو فقط دون التأثير على خطوط وثقوب التصويب
         if (accel > 12f) {
             vibrateFeedback()
-            toggleOverlayVisibility()
+            toggleModMenuWindowVisibility()
             accel = 0f
         }
     }
