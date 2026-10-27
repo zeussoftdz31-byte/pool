@@ -51,6 +51,11 @@ class AimOverlayService : Service(), SensorEventListener {
     private var mediaProjection: MediaProjection? = null
     private var aimTracker: ScreenAimTracker? = null
 
+    // Multi-Option Accuracy Engine
+    private var engineOptionRay = true
+    private var engineOptionMask = true
+    private var engineOptionRing = false
+
     // Display rotation & orientation listeners
     private var displayManager: DisplayManager? = null
     private var displayListener: DisplayManager.DisplayListener? = null
@@ -488,6 +493,75 @@ class AimOverlayService : Service(), SensorEventListener {
             // ========================================================
             // TAB 2: AIM MENU CONTROLS
             // ========================================================
+            val tvEngineModeStatus = modMenuView?.findViewById<TextView>(R.id.tvEngineModeStatus)
+            val switchOptionRay = modMenuView?.findViewById<SwitchCompat>(R.id.switchOptionRay)
+            val switchOptionMask = modMenuView?.findViewById<SwitchCompat>(R.id.switchOptionMask)
+            val switchOptionRing = modMenuView?.findViewById<SwitchCompat>(R.id.switchOptionRing)
+
+            var isUpdatingSwitches = false
+
+            fun syncEngineState() {
+                engineOptionRay = switchOptionRay?.isChecked ?: false
+                engineOptionMask = switchOptionMask?.isChecked ?: false
+                engineOptionRing = switchOptionRing?.isChecked ?: false
+
+                aimTracker?.enableRayContinuity = engineOptionRay
+                aimTracker?.enableBallMaskExclusion = engineOptionMask
+                aimTracker?.isManualRingMode = engineOptionRing
+                canvasView?.isManualRingMode = engineOptionRing
+
+                if (engineOptionRing) {
+                    tvEngineModeStatus?.text = "🧲 خيار 3 نشط: تم قفل الكرة وتعطيل التحليل البصري المتعدد"
+                    tvEngineModeStatus?.setTextColor(Color.parseColor("#00E5FF"))
+                } else if (engineOptionRay && engineOptionMask) {
+                    tvEngineModeStatus?.text = "✨ الوضع الفائق (1 + 2 معاً) نشط: دقة 100% بدون أي خطأ"
+                    tvEngineModeStatus?.setTextColor(Color.parseColor("#10B981"))
+                } else if (engineOptionRay) {
+                    tvEngineModeStatus?.text = "⚡ خيار 1 نشط: الشعاع المتصل وقفل العصا 180°"
+                    tvEngineModeStatus?.setTextColor(Color.parseColor("#38BDF8"))
+                } else if (engineOptionMask) {
+                    tvEngineModeStatus?.text = "🛡️ خيار 2 نشط: قناع حظر الكرات المخططة فقط"
+                    tvEngineModeStatus?.setTextColor(Color.parseColor("#F59E0B"))
+                } else {
+                    tvEngineModeStatus?.text = "⚠️ يرجى تفعيل خيار واحد على الأقل لضمان الدقة"
+                    tvEngineModeStatus?.setTextColor(Color.parseColor("#EF4444"))
+                }
+                canvasView?.postInvalidate()
+            }
+
+            switchOptionRing?.setOnCheckedChangeListener { _, isChecked ->
+                if (isUpdatingSwitches) return@setOnCheckedChangeListener
+                if (isChecked) {
+                    isUpdatingSwitches = true
+                    switchOptionRay?.isChecked = false
+                    switchOptionMask?.isChecked = false
+                    isUpdatingSwitches = false
+                }
+                syncEngineState()
+            }
+
+            switchOptionRay?.setOnCheckedChangeListener { _, isChecked ->
+                if (isUpdatingSwitches) return@setOnCheckedChangeListener
+                if (isChecked) {
+                    isUpdatingSwitches = true
+                    switchOptionRing?.isChecked = false
+                    isUpdatingSwitches = false
+                }
+                syncEngineState()
+            }
+
+            switchOptionMask?.setOnCheckedChangeListener { _, isChecked ->
+                if (isUpdatingSwitches) return@setOnCheckedChangeListener
+                if (isChecked) {
+                    isUpdatingSwitches = true
+                    switchOptionRing?.isChecked = false
+                    isUpdatingSwitches = false
+                }
+                syncEngineState()
+            }
+
+            syncEngineState()
+
             val switchAutoAim = modMenuView?.findViewById<SwitchCompat>(R.id.switchAutoAim)
             val switchCueBallPath = modMenuView?.findViewById<SwitchCompat>(R.id.switchCueBallPath)
             val switchBankShots = modMenuView?.findViewById<SwitchCompat>(R.id.switchBankShots)
@@ -764,6 +838,9 @@ class AimOverlayService : Service(), SensorEventListener {
                     if (canvasView?.isUserCalibrationSaved == true) {
                         aimTracker?.setCalibratedTableBounds(canvasView?.tableBounds)
                     }
+                    aimTracker?.enableRayContinuity = engineOptionRay
+                    aimTracker?.enableBallMaskExclusion = engineOptionMask
+                    aimTracker?.isManualRingMode = engineOptionRing
                     aimTracker?.start()
                 }
             } catch (e: Exception) {

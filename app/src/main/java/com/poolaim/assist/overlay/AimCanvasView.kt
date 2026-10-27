@@ -32,6 +32,7 @@ class AimCanvasView(context: Context) : View(context) {
     var isMatchDetected = false // Only true during a live 8 Ball Pool match!
     var isAutoAimActive = false
     var isAimingActive = false // Only true when game's white line from cue stick appears!
+    var isManualRingMode = false // Option 3: Magnetic Cue Ring Mode
     var cueBallPos = Vector2D(500f, 500f)
     var aimAngleRad = 0f
     var shotPowerPercent = 0.85f
@@ -560,8 +561,8 @@ class AimCanvasView(context: Context) : View(context) {
             return // During setup, only display table calibration guides!
         }
 
-        // PLAY MODE: Lines ONLY appear when the game's white line emerges from the cue stick!
-        if (!isAimingActive) {
+        // PLAY MODE: Lines appear when the game's white line emerges from cue stick, or in Manual Ring Mode!
+        if (!isAimingActive && !isManualRingMode) {
             return
         }
 
@@ -799,7 +800,8 @@ class AimCanvasView(context: Context) : View(context) {
         }
 
         // Draw Cue Ball Origin Marker (الكرة البيضاء هي الأساس الثابت وقاعدة انطلاق الخطوط)
-        canvas.drawCircle(cueBallPos.x, cueBallPos.y, ballRadius * 1.15f, cueAnchorRingPaint)
+        val ringRadius = if (isManualRingMode) ballRadius * 1.35f else ballRadius * 1.15f
+        canvas.drawCircle(cueBallPos.x, cueBallPos.y, ringRadius, cueAnchorRingPaint)
         canvas.drawCircle(cueBallPos.x, cueBallPos.y, ballRadius * 0.40f, ghostBallPaint)
         canvas.drawCircle(cueBallPos.x, cueBallPos.y, 4f, cueAnchorCorePaint)
     }
