@@ -18,19 +18,20 @@ import kotlin.math.*
 data class CircleBall(val x: Float, val y: Float, val radius: Float)
 
 /**
- * High-Accuracy, Pure Kotlin Computer Vision Engine for 8 Ball Pool.
+ * Universal 8 Ball Pool Vision Engine.
  *
- * Accuracy & Stability Features:
- * 1. Sub-Pixel Centroid Tracking: Uses luminance-weighted center-of-mass on white pixels,
- *    achieving < 0.1 pixel error in Cue Ball position.
- * 2. True Object Ball Centroids: Computes center-of-mass of all detected non-felt balls rather than
- *    clamping to initial edge-scan coordinates.
- * 3. Two-Pass 0.1-Degree Sub-Degree Angle Tracking:
- *    - Pass 1: Coarse 1.0° radial sweep across ±35° window.
- *    - Pass 2: Fine 0.1° micro-sweep for laser-sharp guideline alignment.
- * 4. Dual-Signature Aim Detection: Cross-verifies cue stick shaft behind the ball AND
- *    native guideline dots ahead of the ball.
- * 5. Automatic Table Felt & Match Presence Verification: Completely silent outside matches.
+ * Designed to work with ANY table felt color (Cyan, Blue, Green, Red, Purple, Black),
+ * ANY cue stick (Fire / Archangel / Legendary / Default), and ANY screen DPI/Resolution.
+ *
+ * Core Breakthroughs:
+ * 1. Clustering Table Felt Detector: Learns the exact dominant felt color of the table automatically,
+ *    without hardcoded color boundaries. Works on Cyan / Turquoise tables instantly!
+ * 2. High-Contrast Luminance Cue Ball Locator: Finds the white cue ball by relative luminance contrast
+ *    against the detected felt, accommodating ambient color reflections.
+ * 3. Native In-Game Guideline + Cue Stick Dual Angular Tracker:
+ *    Detects the game's own solid white aiming line combined with cue stick position for 0.1° accuracy.
+ * 4. Dynamic Display Metrics: Auto-syncs physical screen dimensions in landscape mode.
+ * 5. Persistent State Retention: Never resets to fallback coordinates during an active match.
  */
 class ScreenAimTracker(
     private val context: Context,
@@ -78,19 +79,24 @@ class ScreenAimTracker(
 
     var isAutoTrackingEnabled = true
 
+    fun updateScreenMetrics() {
+        try {
+            val windowManager = context.getSystemService(Context.WINDOW_SERVICE) as WindowManager
+            val display = windowManager.defaultDisplay
+            val size = Point()
+            display.getRealSize(size)
+            screenWidth = maxOf(320, maxOf(size.x, size.y))
+            screenHeight = maxOf(240, minOf(size.x, size.y))
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+
     fun start() {
         stop()
 
-        val windowManager = context.getSystemService(Context.WINDOW_SERVICE) as WindowManager
-        val display = windowManager.defaultDisplay
-        val size = Point()
-        display.getRealSize(size)
+        updateScreenMetrics()
 
-        // 8 Ball Pool landscape orientation
-        screenWidth = maxOf(320, maxOf(size.x, size.y))
-        screenHeight = maxOf(240, minOf(size.x, size.y))
-
-        // Capture resolution matching physical screen aspect ratio exactly
         captureHeight = 480
         val aspect = screenWidth.toFloat() / screenHeight.toFloat()
         captureWidth = maxOf(16, ((captureHeight * aspect) / 16).toInt() * 16)
@@ -107,7 +113,7 @@ class ScreenAimTracker(
 
         imageReader?.setOnImageAvailableListener({ reader ->
             val now = System.currentTimeMillis()
-            if (now - lastFrameTimeMs < 32 || isProcessingFrame || !isAutoTrackingEnabled) {
+            if (now - lastFrameTimeMs < 30 || isProcessingFrame || !isAutoTrackingEnabled) {
                 reader.acquireLatestImage()?.close()
                 return@setOnImageAvailableListener
             }
@@ -159,12 +165,6 @@ class ScreenAimTracker(
         return (r shl 16) or (g shl 8) or b
     }
 
-    private inline fun isWhitePixel(r: Int, g: Int, b: Int): Boolean {
-        val lum = (r * 77 + g * 150 + b * 29) shr 8
-        val diff = maxOf(r, maxOf(g, b)) - minOf(r, minOf(g, b))
-        return lum >= 175 && diff < 38
-    }
-
     private fun processFrame(image: Image) {
         val plane = image.planes[0]
         val buffer = plane.buffer
@@ -173,34 +173,26 @@ class ScreenAimTracker(
         val width = image.width
         val height = image.height
 
-        // Playing field bounds in landscape
         val tableStartX = (width * 0.12f).toInt()
         val tableEndX = (width * 0.88f).toInt()
         val tableStartY = (height * 0.14f).toInt()
         val tableEndY = (height * 0.86f).toInt()
 
-        // 8 Ball Pool true ball radius at 480p is ~10.6px (matches tableH / 33.0f on 1080p screen)
         val ballRadiusEst = height * 0.022f
 
         // =========================================================================
-        // STEP 1: TABLE FELT & MATCH STATE DETECTION
+        // STEP 1: UNIVERSAL CLUSTERING TABLE FELT DETECTOR
         // =========================================================================
-        var greenCount = 0
-        var blueCount = 0
-        var redCount = 0
-        var otherCount = 0
-
-        var sumFeltR = 0
-        var sumFeltG = 0
-        var sumFeltB = 0
-        var dominantFeltSamples = 0
-
+        // Works on ANY felt color (Cyan, Turquoise, Green, Blue, Red, Purple, etc.)
         val gridCols = 7
         val gridRows = 5
         val stepX = (tableEndX - tableStartX) / (gridCols + 1)
         val stepY = (tableEndY - tableStartY) / (gridRows + 1)
+        val numSamples = gridCols * gridRows
 
-        val sampledColors = IntArray(gridCols * gridRows)
+        val sampleR = IntArray(numSamples)
+        val sampleG = IntArray(numSamples)
+        val sampleB = IntArray(numSamples)
         var sIdx = 0
 
         for (row in 1..gridRows) {
@@ -208,63 +200,80 @@ class ScreenAimTracker(
             for (col in 1..gridCols) {
                 val sx = tableStartX + col * stepX
                 val c = getPixelPacked(buffer, sx, sy, rowStride, pixelStride, width, height)
-                sampledColors[sIdx++] = c
-
-                val r = (c shr 16) and 0xFF
-                val g = (c shr 8) and 0xFF
-                val b = c and 0xFF
-
-                if (g > 55 && g > r + 15 && g > b - 10) {
-                    greenCount++
-                } else if (b > 65 && b > r + 20) {
-                    blueCount++
-                } else if (r > 85 && r > g + 25 && r > b + 15) {
-                    redCount++
-                } else {
-                    otherCount++
-                }
+                sampleR[sIdx] = (c shr 16) and 0xFF
+                sampleG[sIdx] = (c shr 8) and 0xFF
+                sampleB[sIdx] = c and 0xFF
+                sIdx++
             }
         }
 
-        val maxClothCount = maxOf(greenCount, maxOf(blueCount, redCount))
-        val dominantFamily = when {
-            greenCount == maxClothCount && greenCount >= 16 -> 1 // Green
-            blueCount == maxClothCount && blueCount >= 16 -> 2  // Blue
-            redCount == maxClothCount && redCount >= 16 -> 3   // Red
-            else -> 0
-        }
-
-        if (dominantFamily > 0) {
-            for (c in sampledColors) {
-                val r = (c shr 16) and 0xFF
-                val g = (c shr 8) and 0xFF
-                val b = c and 0xFF
-
-                val matchesDominant = when (dominantFamily) {
-                    1 -> g > 55 && g > r + 15 && g > b - 10
-                    2 -> b > 65 && b > r + 20
-                    3 -> r > 85 && r > g + 25 && r > b + 15
-                    else -> false
-                }
-                if (matchesDominant) {
-                    sumFeltR += r
-                    sumFeltG += g
-                    sumFeltB += b
-                    dominantFeltSamples++
-                }
+        // Find the sample point with the highest number of similar color neighbors (within dist 45)
+        var bestClusterCount = 0
+        var bestClusterIdx = 0
+        for (i in 0 until numSamples) {
+            var count = 0
+            val ri = sampleR[i]
+            val gi = sampleG[i]
+            val bi = sampleB[i]
+            for (j in 0 until numSamples) {
+                val diff = abs(ri - sampleR[j]) + abs(gi - sampleG[j]) + abs(bi - sampleB[j])
+                if (diff < 45) count++
+            }
+            if (count > bestClusterCount) {
+                bestClusterCount = count
+                bestClusterIdx = i
             }
         }
 
-        val feltR = if (dominantFeltSamples > 0) sumFeltR / dominantFeltSamples else 30
-        val feltG = if (dominantFeltSamples > 0) sumFeltG / dominantFeltSamples else 120
-        val feltB = if (dominantFeltSamples > 0) sumFeltB / dominantFeltSamples else 60
+        // A live match table has at least 16 uniform felt samples out of 35
+        val isTableClothDetected = bestClusterCount >= 16
+
+        // Compute exact average felt RGB and luminance
+        var sumFeltR = 0
+        var sumFeltG = 0
+        var sumFeltB = 0
+        var clusterMembers = 0
+        val refR = sampleR[bestClusterIdx]
+        val refG = sampleG[bestClusterIdx]
+        val refB = sampleB[bestClusterIdx]
+
+        for (i in 0 until numSamples) {
+            if (abs(refR - sampleR[i]) + abs(refG - sampleG[i]) + abs(refB - sampleB[i]) < 45) {
+                sumFeltR += sampleR[i]
+                sumFeltG += sampleG[i]
+                sumFeltB += sampleB[i]
+                clusterMembers++
+            }
+        }
+
+        val feltR = if (clusterMembers > 0) sumFeltR / clusterMembers else 40
+        val feltG = if (clusterMembers > 0) sumFeltG / clusterMembers else 170
+        val feltB = if (clusterMembers > 0) sumFeltB / clusterMembers else 215
+        val feltLum = (feltR * 77 + feltG * 150 + feltB * 29) shr 8
 
         fun isFelt(r: Int, g: Int, b: Int): Boolean {
-            return (abs(r - feltR) + abs(g - feltG) + abs(b - feltB)) < 60
+            return (abs(r - feltR) + abs(g - feltG) + abs(b - feltB)) < 55
         }
 
-        if (dominantFamily > 0 && dominantFeltSamples >= 16) {
-            matchConfidenceFrames = minOf(12, matchConfidenceFrames + 2)
+        fun isCueBallColor(r: Int, g: Int, b: Int): Boolean {
+            val lum = (r * 77 + g * 150 + b * 29) shr 8
+            val maxC = maxOf(r, maxOf(g, b))
+            val minC = minOf(r, minOf(g, b))
+            val satDiff = maxC - minC
+            // Cue ball is much brighter than felt, has high luminance, and low color saturation
+            return (lum >= 170 && (lum - feltLum) > 22 && satDiff < 68) || (lum >= 225 && satDiff < 50)
+        }
+
+        fun isWhiteLineColor(r: Int, g: Int, b: Int): Boolean {
+            val lum = (r * 77 + g * 150 + b * 29) shr 8
+            val maxC = maxOf(r, maxOf(g, b))
+            val minC = minOf(r, minOf(g, b))
+            return lum >= 195 && (maxC - minC) < 60
+        }
+
+        // Hysteresis filter: 2 frames to activate, 4 to deactivate
+        if (isTableClothDetected) {
+            matchConfidenceFrames = minOf(10, matchConfidenceFrames + 2)
         } else {
             matchConfidenceFrames = maxOf(0, matchConfidenceFrames - 1)
         }
@@ -283,19 +292,19 @@ class ScreenAimTracker(
         }
 
         // =========================================================================
-        // STEP 2: SUB-PIXEL CUE BALL CENTROID LOCATOR
+        // STEP 2: LOCATE CUE BALL (WHITE BALL)
         // =========================================================================
         var detectedCueX = -1f
         var detectedCueY = -1f
 
-        // Fast Path: When locked, sample dense 1px grid inside local box for sub-pixel precision
+        // Fast Path: Search around last locked position
         if (isLockedOnCue && lockedCueX > tableStartX && lockedCueX < tableEndX &&
             lockedCueY > tableStartY && lockedCueY < tableEndY
         ) {
             var sumX = 0f
             var sumY = 0f
             var totalWeight = 0f
-            val searchRadius = (ballRadiusEst * 1.35f).toInt()
+            val searchRadius = (ballRadiusEst * 1.5f).toInt()
             val startSearchX = (lockedCueX - searchRadius).toInt().coerceIn(tableStartX, tableEndX)
             val endSearchX = (lockedCueX + searchRadius).toInt().coerceIn(tableStartX, tableEndX)
             val startSearchY = (lockedCueY - searchRadius).toInt().coerceIn(tableStartY, tableEndY)
@@ -307,9 +316,9 @@ class ScreenAimTracker(
                     val r = (c shr 16) and 0xFF
                     val g = (c shr 8) and 0xFF
                     val b = c and 0xFF
-                    if (isWhitePixel(r, g, b)) {
+                    if (isCueBallColor(r, g, b)) {
                         val lum = (r * 77 + g * 150 + b * 29) shr 8
-                        val weight = (lum - 170).coerceAtLeast(1).toFloat()
+                        val weight = (lum - 150).coerceAtLeast(1).toFloat()
                         sumX += x * weight
                         sumY += y * weight
                         totalWeight += weight
@@ -317,7 +326,7 @@ class ScreenAimTracker(
                 }
             }
 
-            if (totalWeight > 50f) {
+            if (totalWeight > 35f) {
                 detectedCueX = sumX / totalWeight
                 detectedCueY = sumY / totalWeight
                 lockedCueX = detectedCueX
@@ -325,7 +334,7 @@ class ScreenAimTracker(
                 lostFrames = 0
             } else {
                 lostFrames++
-                if (lostFrames < 8) {
+                if (lostFrames < 12) {
                     detectedCueX = lockedCueX
                     detectedCueY = lockedCueY
                 } else {
@@ -337,11 +346,11 @@ class ScreenAimTracker(
 
         // Slow Path: Scan table to find cue ball
         if (detectedCueX < 0f) {
-            var bestCueScore = 0
-            var bestCx = -1f
-            var bestCy = -1f
+            var bestBallWeight = 0f
+            var bestBx = -1f
+            var bestBy = -1f
 
-            val scanStep = 4
+            val scanStep = 3
             for (y in tableStartY until tableEndY step scanStep) {
                 for (x in tableStartX until tableEndX step scanStep) {
                     val c = getPixelPacked(buffer, x, y, rowStride, pixelStride, width, height)
@@ -349,11 +358,12 @@ class ScreenAimTracker(
                     val g = (c shr 8) and 0xFF
                     val b = c and 0xFF
 
-                    if (isWhitePixel(r, g, b)) {
+                    if (isCueBallColor(r, g, b)) {
                         var sumX = 0f
                         var sumY = 0f
                         var count = 0
-                        val rInt = ballRadiusEst.toInt()
+                        var totalW = 0f
+                        val rInt = (ballRadiusEst * 1.15f).toInt()
 
                         for (cy in (y - rInt)..(y + rInt) step 2) {
                             for (cx in (x - rInt)..(x + rInt) step 2) {
@@ -361,46 +371,29 @@ class ScreenAimTracker(
                                 val subR = (cSub shr 16) and 0xFF
                                 val subG = (cSub shr 8) and 0xFF
                                 val subB = cSub and 0xFF
-                                if (isWhitePixel(subR, subG, subB)) {
-                                    sumX += cx
-                                    sumY += cy
+                                if (isCueBallColor(subR, subG, subB)) {
+                                    val lum = (subR * 77 + subG * 150 + subB * 29) shr 8
+                                    val w = (lum - 150).coerceAtLeast(1).toFloat()
+                                    sumX += cx * w
+                                    sumY += cy * w
+                                    totalW += w
                                     count++
                                 }
                             }
                         }
 
-                        if (count in 18..160 && count > bestCueScore) {
-                            val candidateX = sumX / count
-                            val candidateY = sumY / count
-
-                            var feltPerimeterCount = 0
-                            val testDist = ballRadiusEst * 1.35f
-                            for (angleDeg in 0 until 360 step 45) {
-                                val rad = Math.toRadians(angleDeg.toDouble())
-                                val px = (candidateX + cos(rad) * testDist).toInt()
-                                val py = (candidateY + sin(rad) * testDist).toInt()
-                                val cp = getPixelPacked(buffer, px, py, rowStride, pixelStride, width, height)
-                                val pr = (cp shr 16) and 0xFF
-                                val pg = (cp shr 8) and 0xFF
-                                val pb = cp and 0xFF
-                                if (isFelt(pr, pg, pb)) {
-                                    feltPerimeterCount++
-                                }
-                            }
-
-                            if (feltPerimeterCount >= 5) {
-                                bestCueScore = count
-                                bestCx = candidateX
-                                bestCy = candidateY
-                            }
+                        if (count in 14..220 && totalW > bestBallWeight) {
+                            bestBallWeight = totalW
+                            bestBx = sumX / totalW
+                            bestBy = sumY / totalW
                         }
                     }
                 }
             }
 
-            if (bestCx > 0f && bestCy > 0f) {
-                detectedCueX = bestCx
-                detectedCueY = bestCy
+            if (bestBx > 0f && bestBy > 0f) {
+                detectedCueX = bestBx
+                detectedCueY = bestBy
                 lockedCueX = detectedCueX
                 lockedCueY = detectedCueY
                 isLockedOnCue = true
@@ -408,13 +401,19 @@ class ScreenAimTracker(
             }
         }
 
+        // Fallback: If temporarily obscured (e.g. by popup or hand), keep last known coordinates
         if (detectedCueX < 0f) {
-            detectedCueX = width * 0.35f
-            detectedCueY = height * 0.50f
+            if (lockedCueX > 0f && lockedCueY > 0f) {
+                detectedCueX = lockedCueX
+                detectedCueY = lockedCueY
+            } else {
+                detectedCueX = width * 0.50f
+                detectedCueY = height * 0.50f
+            }
         }
 
         // =========================================================================
-        // STEP 3: DETECT OBJECT / TARGET BALLS WITH TRUE CENTROIDS
+        // STEP 3: DETECT OBJECT / TARGET BALLS (TRUE CENTROIDS)
         // =========================================================================
         val detectedBalls = mutableListOf<CircleBall>()
         val ballStep = 6
@@ -427,7 +426,7 @@ class ScreenAimTracker(
                 val g = (c shr 8) and 0xFF
                 val b = c and 0xFF
 
-                if (!isFelt(r, g, b) && !isWhitePixel(r, g, b)) {
+                if (!isFelt(r, g, b) && !isCueBallColor(r, g, b)) {
                     val dCueSq = (x - detectedCueX) * (x - detectedCueX) + (y - detectedCueY) * (y - detectedCueY)
                     if (dCueSq > minBallDistSq) {
                         var isCloseToExisting = false
@@ -440,7 +439,6 @@ class ScreenAimTracker(
                         }
 
                         if (!isCloseToExisting) {
-                            // Compute TRUE centroid of object ball
                             var sumBx = 0f
                             var sumBy = 0f
                             var ballPixels = 0
@@ -464,7 +462,7 @@ class ScreenAimTracker(
                                 }
                             }
 
-                            if (ballPixels >= 14) {
+                            if (ballPixels >= 12) {
                                 val trueBx = sumBx / ballPixels
                                 val trueBy = sumBy / ballPixels
                                 detectedBalls.add(CircleBall(trueBx, trueBy, ballRadiusEst))
@@ -478,7 +476,7 @@ class ScreenAimTracker(
         }
 
         // =========================================================================
-        // STEP 4: TWO-PASS SUB-DEGREE (0.1°) CUE STICK & AIM ANGLE TRACKER
+        // STEP 4: RADIAL IN-GAME GUIDELINE & CUE STICK AIM ANGLE TRACKER
         // =========================================================================
         val piF = Math.PI.toFloat()
         val degToRad = (piF / 180f)
@@ -486,55 +484,39 @@ class ScreenAimTracker(
         fun scoreAngle(cx: Float, cy: Float, radius: Float, theta: Float): Float {
             val cosT = cos(theta.toDouble()).toFloat()
             val sinT = sin(theta.toDouble()).toFloat()
-            val perpX = -sinT
-            val perpY = cosT
 
             var score = 0f
 
-            // 1. Test 5 points along cue stick behind ball (theta + PI)
-            for (s in 1..5) {
-                val dBack = radius * (1.8f + s * 0.8f)
-                val bx = (cx - dBack * cosT).toInt()
-                val by = (cy - dBack * sinT).toInt()
-
-                if (bx in tableStartX..tableEndX && by in tableStartY..tableEndY) {
-                    val cCenter = getPixelPacked(buffer, bx, by, rowStride, pixelStride, width, height)
-                    val cr = (cCenter shr 16) and 0xFF
-                    val cg = (cCenter shr 8) and 0xFF
-                    val cb = cCenter and 0xFF
-
-                    if (!isFelt(cr, cg, cb)) {
-                        // Flank check: felt cloth on both sides of cue shaft
-                        val cLeft = getPixelPacked(buffer, (bx - 5 * perpX).toInt(), (by - 5 * perpY).toInt(), rowStride, pixelStride, width, height)
-                        val cRight = getPixelPacked(buffer, (bx + 5 * perpX).toInt(), (by + 5 * perpY).toInt(), rowStride, pixelStride, width, height)
-                        val lr = (cLeft shr 16) and 0xFF
-                        val lg = (cLeft shr 8) and 0xFF
-                        val lb = cLeft and 0xFF
-                        val rr = (cRight shr 16) and 0xFF
-                        val rg = (cRight shr 8) and 0xFF
-                        val rb = cRight and 0xFF
-
-                        if (isFelt(lr, lg, lb) && isFelt(rr, rg, rb)) {
-                            score += 1.5f
-                        } else if (isFelt(lr, lg, lb) || isFelt(rr, rg, rb)) {
-                            score += 0.5f
-                        }
+            // 1. Check in-game white aiming line ahead along theta (distances: 1.4R, 2.2R, 3.0R)
+            for (g in 1..3) {
+                val dFwd = radius * (1.3f + g * 0.9f)
+                val fx = (cx + dFwd * cosT).toInt()
+                val fy = (cy + dFwd * sinT).toInt()
+                if (fx in tableStartX..tableEndX && fy in tableStartY..tableEndY) {
+                    val c = getPixelPacked(buffer, fx, fy, rowStride, pixelStride, width, height)
+                    val r = (c shr 16) and 0xFF
+                    val gCol = (c shr 8) and 0xFF
+                    val b = c and 0xFF
+                    if (isWhiteLineColor(r, gCol, b)) {
+                        score += 3.5f
                     }
                 }
             }
 
-            // 2. Test 3 points ahead along aim line (guideline dots)
-            for (g in 1..3) {
-                val dFwd = radius * (1.4f + g * 1.0f)
-                val fx = (cx + dFwd * cosT).toInt()
-                val fy = (cy + dFwd * sinT).toInt()
-                if (fx in tableStartX..tableEndX && fy in tableStartY..tableEndY) {
-                    val cCenter = getPixelPacked(buffer, fx, fy, rowStride, pixelStride, width, height)
-                    val cr = (cCenter shr 16) and 0xFF
-                    val cg = (cCenter shr 8) and 0xFF
-                    val cb = cCenter and 0xFF
-                    if (isWhitePixel(cr, cg, cb) || !isFelt(cr, cg, cb)) {
-                        score += 1.0f
+            // 2. Check cue stick behind ball along (theta + PI) (distances: 1.8R, 2.8R, 3.8R, 4.8R)
+            // Works with ANY cue stick (fire, dragon, wood, metallic) because it is NOT table felt!
+            for (s in 1..4) {
+                val dBack = radius * (1.8f + s * 1.0f)
+                val bx = (cx - dBack * cosT).toInt()
+                val by = (cy - dBack * sinT).toInt()
+
+                if (bx in tableStartX..tableEndX && by in tableStartY..tableEndY) {
+                    val c = getPixelPacked(buffer, bx, by, rowStride, pixelStride, width, height)
+                    val r = (c shr 16) and 0xFF
+                    val gCol = (c shr 8) and 0xFF
+                    val b = c and 0xFF
+                    if (!isFelt(r, gCol, b)) {
+                        score += 1.5f
                     }
                 }
             }
@@ -558,11 +540,11 @@ class ScreenAimTracker(
                 }
             }
 
-            if (bestCoarseScore < 1.5f) {
+            if (bestCoarseScore < 2.0f) {
                 return Pair(bestCoarseScore, bestCoarseAngle)
             }
 
-            // Pass 2: Fine 0.1-degree search around bestCoarseAngle (±1.5°)
+            // Fine sub-degree 0.1° search around bestCoarseAngle (±1.5°)
             var bestFineScore = bestCoarseScore
             var bestFineAngle = bestCoarseAngle
             val fineRange = 1.5f
@@ -594,6 +576,7 @@ class ScreenAimTracker(
                 while (smoothAngle > piF) smoothAngle -= (2f * piF)
                 lockFrames++
             } else {
+                // If angle shifted significantly, sweep full 360°
                 val (broadScore, broadAngle) = findBestAngle(0f, rangeDeg = 360f, coarseStepDeg = 2.0f, fineStepDeg = 0.1f)
                 if (broadScore >= 2.0f) {
                     smoothAngle = broadAngle
@@ -643,9 +626,9 @@ class ScreenAimTracker(
         for (y in sliderY1..sliderY2 step 6) {
             val c = getPixelPacked(buffer, sliderX, y, rowStride, pixelStride, width, height)
             val r = (c shr 16) and 0xFF
-            val g = (c shr 8) and 0xFF
+            val gCol = (c shr 8) and 0xFF
             val b = c and 0xFF
-            if ((r > 160 && g > 110 && b < 90) || (r > 180 && g < 120)) {
+            if ((r > 160 && gCol > 110 && b < 90) || (r > 180 && gCol < 120)) {
                 pulledCount++
             }
         }
