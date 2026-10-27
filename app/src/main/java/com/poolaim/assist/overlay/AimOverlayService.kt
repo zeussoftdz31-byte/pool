@@ -363,12 +363,29 @@ class AimOverlayService : Service(), SensorEventListener {
             // ========================================================
             // TAB 1: VISUALS (Table Zoom, Pocket Size, D-Pad, Auto-Fit)
             // ========================================================
+            val tvModeTitle = modMenuView?.findViewById<TextView>(R.id.tvModeTitle)
+            val tvModeSubtitle = modMenuView?.findViewById<TextView>(R.id.tvModeSubtitle)
             val switchCalibrationMode = modMenuView?.findViewById<SwitchCompat>(R.id.switchCalibrationMode)
             val btnSaveCalibration = modMenuView?.findViewById<View>(R.id.btnSaveCalibration)
 
+            fun updateModeLabels(isCalibration: Boolean) {
+                if (isCalibration) {
+                    tvModeTitle?.text = "🎯 وضع إعداد ومعايرة الطاولة (Setup Mode)"
+                    tvModeTitle?.setTextColor(Color.parseColor("#FF1744"))
+                    tvModeSubtitle?.text = "طابق الحواف والجيوب الحمراء مع اللعبة في وضع التمرين ثم اضغط حفظ"
+                } else {
+                    tvModeTitle?.text = "🎮 وضع اللعب المباشر (Play Mode)"
+                    tvModeTitle?.setTextColor(Color.parseColor("#10B981"))
+                    tvModeSubtitle?.text = "الخطوط تظهر تلقائياً وبدقة 100% بمجرد ظهور الخط الأبيض من العصا"
+                }
+            }
+
             switchCalibrationMode?.isChecked = canvasView?.isCalibrationModeActive ?: false
+            updateModeLabels(switchCalibrationMode?.isChecked ?: false)
+
             switchCalibrationMode?.setOnCheckedChangeListener { _, isChecked ->
                 canvasView?.isCalibrationModeActive = isChecked
+                updateModeLabels(isChecked)
                 canvasView?.postInvalidate()
             }
 
@@ -376,11 +393,12 @@ class AimOverlayService : Service(), SensorEventListener {
                 canvasView?.saveCalibration(markAsUserSaved = true)
                 canvasView?.isCalibrationModeActive = false
                 switchCalibrationMode?.isChecked = false
+                updateModeLabels(false)
                 canvasView?.postInvalidate()
                 canvasView?.tableBounds?.let { b ->
                     aimTracker?.setCalibratedTableBounds(b)
                 }
-                Toast.makeText(this, "💾 تم حفظ وتثبيت حدود الطاولة بنجاح! المحرك مقيد الآن داخل الحواف الحمراء بدقة 100%", Toast.LENGTH_LONG).show()
+                Toast.makeText(this, "✅ تم تثبيت الأبعاد بنجاح! تم تفعيل وضع اللعب المباشر (تظهر الخطوط مع خط العصا الأبيض) 🎯", Toast.LENGTH_LONG).show()
             }
 
             val seekTableZoom = modMenuView?.findViewById<SeekBar>(R.id.seekTableZoom)
@@ -733,9 +751,10 @@ class AimOverlayService : Service(), SensorEventListener {
                             powerPercent: Float,
                             targetBallPos: Vector2D?,
                             matchDetected: Boolean,
-                            tableBounds: RectF?
+                            tableBounds: RectF?,
+                            isAiming: Boolean
                         ) {
-                            canvasView?.updateAutoAim(cueBallPos, aimAngleRad, powerPercent, targetBallPos, matchDetected, tableBounds)
+                            canvasView?.updateAutoAim(cueBallPos, aimAngleRad, powerPercent, targetBallPos, matchDetected, tableBounds, isAiming)
                         }
 
                         override fun onMatchStateChanged(isMatch: Boolean) {

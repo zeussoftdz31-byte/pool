@@ -31,6 +31,7 @@ class AimCanvasView(context: Context) : View(context) {
     // Live Aim State from Computer Vision
     var isMatchDetected = false // Only true during a live 8 Ball Pool match!
     var isAutoAimActive = false
+    var isAimingActive = false // Only true when game's white line from cue stick appears!
     var cueBallPos = Vector2D(500f, 500f)
     var aimAngleRad = 0f
     var shotPowerPercent = 0.85f
@@ -428,9 +429,11 @@ class AimCanvasView(context: Context) : View(context) {
         power: Float,
         target: Vector2D?,
         matchActive: Boolean = true,
-        detectedBounds: RectF? = null
+        detectedBounds: RectF? = null,
+        isAiming: Boolean = true
     ) {
         isMatchDetected = matchActive
+        isAimingActive = isAiming
         if (!isMasterOverlayEnabled) return
 
         if (!isUserCalibrationSaved && detectedBounds != null && detectedBounds.width() > 100f && detectedBounds.height() > 80f) {
@@ -455,6 +458,9 @@ class AimCanvasView(context: Context) : View(context) {
     fun setMatchActive(active: Boolean) {
         if (isMatchDetected != active) {
             isMatchDetected = active
+            if (!active) {
+                isAimingActive = false
+            }
             postInvalidate()
         }
     }
@@ -541,13 +547,26 @@ class AimCanvasView(context: Context) : View(context) {
             return
         }
 
-        // Interactive Calibration Mode
+        // Interactive Calibration Mode (Setup Mode)
         if (isCalibrationModeActive) {
             drawCalibrationOverlay(canvas)
+            canvas.drawRect(tableBounds, cushionBorderPaint)
+            val pocketVisualRadius = ballRadius * 1.55f * pocketScale
+            for (p in pockets) {
+                canvas.drawCircle(p.x, p.y, pocketVisualRadius, pocketInnerFillPaint)
+                canvas.drawCircle(p.x, p.y, pocketVisualRadius, pocketMarkerPaint)
+                canvas.drawCircle(p.x, p.y, 4f, pocketMarkerPaint)
+            }
+            return // During setup, only display table calibration guides!
+        }
+
+        // PLAY MODE: Lines ONLY appear when the game's white line emerges from the cue stick!
+        if (!isAimingActive) {
+            return
         }
 
         // 1. Draw Table Cushions (Rails where bank shots bounce!)
-        if (showTableCushions || isCalibrationModeActive) {
+        if (showTableCushions) {
             canvas.drawRect(tableBounds, cushionBorderPaint)
         }
 

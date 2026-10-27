@@ -276,9 +276,10 @@
                                 android:layout_height="wrap_content">
 
                                 <TextView
+                                    android:id="@+id/tvModeTitle"
                                     android:layout_width="wrap_content"
                                     android:layout_height="wrap_content"
-                                    android:text="🎯 وضع إعداد ومعايرة الطاولة"
+                                    android:text="🎯 وضع إعداد ومعايرة الطاولة (Setup Mode)"
                                     android:textColor="#FF1744"
                                     android:textStyle="bold"
                                     android:textSize="11sp"
@@ -295,6 +296,7 @@
                             </RelativeLayout>
 
                             <TextView
+                                android:id="@+id/tvModeSubtitle"
                                 android:layout_width="match_parent"
                                 android:layout_height="wrap_content"
                                 android:text="افتح وضع التمرين (Practice) وطابق الحواف والجيوب الحمراء مع اللعبة تماماً ثم احفظ"
@@ -306,7 +308,7 @@
                                 android:id="@+id/btnSaveCalibration"
                                 android:layout_width="match_parent"
                                 android:layout_height="26dp"
-                                android:text="💾 حفظ وتثبيت الأبعاد نهائياً (Save &amp; Lock)"
+                                android:text="💾 حفظ وتثبيت الأبعاد وتفعيل وضع اللعب (Save &amp; Play)"
                                 android:textColor="#FFFFFF"
                                 android:textSize="10sp"
                                 android:textStyle="bold"

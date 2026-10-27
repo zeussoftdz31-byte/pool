@@ -44,7 +44,8 @@ class ScreenAimTracker(
             powerPercent: Float,
             targetBallPos: Vector2D?,
             matchDetected: Boolean,
-            tableBounds: RectF? = null
+            tableBounds: RectF? = null,
+            isAiming: Boolean = true
         )
         fun onMatchStateChanged(isMatch: Boolean)
     }
@@ -75,6 +76,10 @@ class ScreenAimTracker(
     // Match detection state & hysteresis
     private var isMatchActive = false
     private var matchConfidenceFrames = 0
+
+    // Aiming state (active when game's white line emerges from cue stick)
+    private var isAimingActive = false
+    private var aimConfidenceFrames = 0
 
     var isAutoTrackingEnabled = true
     var userCalibratedBounds: RectF? = null
@@ -746,6 +751,15 @@ class ScreenAimTracker(
             lockFrames++
         }
 
+        // Detect if game's native white line or aiming cue stick is active
+        val isWhiteLineDetected = (linePointsX.size >= 5) || (hasValidAngle && lockFrames > 0)
+        if (isWhiteLineDetected && detectedCueX > tableStartX && detectedCueX < tableEndX) {
+            aimConfidenceFrames = minOf(6, aimConfidenceFrames + 2)
+        } else {
+            aimConfidenceFrames = maxOf(0, aimConfidenceFrames - 2)
+        }
+        isAimingActive = (aimConfidenceFrames >= 2)
+
         // =========================================================================
         // STEP 5: RAY-CASTING TO FIND TARGET OBJECT BALL
         // =========================================================================
@@ -827,7 +841,8 @@ class ScreenAimTracker(
             powerPercent = smoothPower,
             targetBallPos = realTargetPos,
             matchDetected = true,
-            tableBounds = detectedBounds
+            tableBounds = detectedBounds,
+            isAiming = isAimingActive
         )
     }
 
