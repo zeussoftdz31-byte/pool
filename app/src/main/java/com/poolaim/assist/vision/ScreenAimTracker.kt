@@ -509,8 +509,16 @@ class ScreenAimTracker(
                 while (rDist <= r2) {
                     val px = (cx + rDist * cosT).toInt()
                     val py = (cy + rDist * sinT).toInt()
-                    if (px in 0 until width && py in 0 until height && isWhiteLinePixel(px, py)) {
-                        whiteDots++
+                    if (px in 2 until width - 2 && py in 2 until height - 2) {
+                        val c = getPixelPacked(buffer, px, py, rowStride, pixelStride, width, height)
+                        val r = (c shr 16) and 0xFF
+                        val gCol = (c shr 8) and 0xFF
+                        val b = c and 0xFF
+                        val lum = 0.299f * r + 0.587f * gCol + 0.114f * b
+                        val diff = maxOf(r, maxOf(gCol, b)) - minOf(r, minOf(gCol, b))
+                        if (((lum > 180f && diff < 45) || (r > 200 && gCol > 200 && b > 200)) && (lum - feltLum > 24f)) {
+                            whiteDots++
+                        }
                     }
                     rDist += maxOf(2.0f, ballRadiusEst * 0.35f)
                 }
