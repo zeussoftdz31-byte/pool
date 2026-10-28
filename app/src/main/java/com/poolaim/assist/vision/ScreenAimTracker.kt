@@ -797,203 +797,134 @@ class ScreenAimTracker(
             }
             if (detectedBalls.size >= 15) break
         }
-
         // =========================================================================
-        // STEP 4: SUB-PIXEL RADIAL RAYCAST & 180° CUE LOCK ENGINE (OPTIONS 1, 2, 3)
+        // STEP 4: PURE CUE STICK DETECTION (ZERO WHITE DOT TRACKING)
+        // Aiming Master Rule: The Cue Stick is the ONLY true source of aim angle!
+        // When stick is absent (player shot / balls moving / opponent turn) -> isAimingActive = false.
         // =========================================================================
         val piF = Math.PI.toFloat()
         val degToRad = (piF / 180f)
 
-        // Moderate mask: 1.12x radius masks out object ball stripes and numbers,
-        // but NEVER swallows the in-game aiming guideline entering the target ball!
-        val maskRadiusSq = if (enableBallMaskExclusion) {
-            (ballRadiusEst * 1.12f) * (ballRadiusEst * 1.12f)
-        } else {
-            (ballRadiusEst * 0.95f) * (ballRadiusEst * 0.95f)
-        }
+        // Function to score cue stick at a given angle theta from cue ball (cx, cy)
+        // A true cue stick is a narrow shaft (not felt) surrounded by felt on both flanks!
+        fun scoreCueStickShaft(cx: Float, cy: Float, angleRad: Float): Float {
+            val cosA = cos(angleRad.toDouble()).toFloat()
+            val sinA = sin(angleRad.toDouble()).toFloat()
+            val orthCos = -sinA
+            val orthSin = cosA
+            val flankDist = ballRadiusEst * 0.65f
 
-        fun isInsideObjectBall(px: Float, py: Float): Boolean {
-            for (ob in detectedBalls) {
-                val dSq = (px - ob.x) * (px - ob.x) + (py - ob.y) * (py - ob.y)
-                if (dSq <= maskRadiusSq) return true
-            }
-            return false
-        }
+            var shaftMatches = 0
+            var flankFeltMatches = 0
 
-        fun isWhiteLinePixel(px: Int, py: Int): Boolean {
-            if (px !in 2 until width - 2 || py !in 2 until height - 2) return false
-            if (enableBallMaskExclusion && isInsideObjectBall(px.toFloat(), py.toFloat())) return false
-            val c = getPixelPacked(buffer, px, py, rowStride, pixelStride, width, height)
-            val r = (c shr 16) and 0xFF
-            val gCol = (c shr 8) and 0xFF
-            val b = c and 0xFF
-            val lum = 0.299f * r + 0.587f * gCol + 0.114f * b
-            val diff = maxOf(r, maxOf(gCol, b)) - minOf(r, minOf(gCol, b))
-            // Robust white guideline dot check (neutral high brightness or significantly brighter than felt)
-            return (lum > 170f && diff < 55) || (r > 190 && gCol > 190 && b > 190) || (lum - feltLum > 18f && diff < 65)
-        }
+            // Sample along the stick shaft from 1.30*R to 4.5*R (7 samples)
+            for (step in 1..7) {
+                val dist = ballRadiusEst * (1.30f + step * 0.45f)
+                val px = (cx + dist * cosA).toInt()
+                val py = (cy + dist * sinA).toInt()
 
-        fun scoreCueStickAtAngle(cx: Float, cy: Float, stickAngleRad: Float): Float {
-            val cosT = cos(stickAngleRad.toDouble()).toFloat()
-            val sinT = sin(stickAngleRad.toDouble()).toFloat()
-            var stickScore = 0f
-            for (s in 1..9) {
-                val dist = ballRadiusEst * (1.20f + s * 0.45f)
-                val bx = (cx + dist * cosT).toInt()
-                val by = (cy + dist * sinT).toInt()
-                if (bx in 2 until width - 2 && by in 2 until height - 2) {
-                    val c = getPixelPacked(buffer, bx, by, rowStride, pixelStride, width, height)
+                if (px in 2 until width - 2 && py in 2 until height - 2) {
+                    val c = getPixelPacked(buffer, px, py, rowStride, pixelStride, width, height)
                     val r = (c shr 16) and 0xFF
-                    val gCol = (c shr 8) and 0xFF
+                    val g = (c shr 8) and 0xFF
                     val b = c and 0xFF
-                    if (!isFelt(r, gCol, b)) {
-                        stickScore += 1.0f
+
+                    if (!isFelt(r, g, b)) {
+                        shaftMatches++
+
+                        // Check left and right flanks (must be table felt for a narrow cue stick)
+                        val flX = (px + flankDist * orthCos).toInt()
+                        val flY = (py + flankDist * orthSin).toInt()
+                        val frX = (px - flankDist * orthCos).toInt()
+                        val frY = (py - flankDist * orthSin).toInt()
+
+                        if (flX in 0 until width && flY in 0 until height) {
+                            val cFl = getPixelPacked(buffer, flX, flY, rowStride, pixelStride, width, height)
+                            if (isFelt((cFl shr 16) and 0xFF, (cFl shr 8) and 0xFF, cFl and 0xFF)) {
+                                flankFeltMatches++
+                            }
+                        }
+                        if (frX in 0 until width && frY in 0 until height) {
+                            val cFr = getPixelPacked(buffer, frX, frY, rowStride, pixelStride, width, height)
+                            if (isFelt((cFr shr 16) and 0xFF, (cFr shr 8) and 0xFF, cFr and 0xFF)) {
+                                flankFeltMatches++
+                            }
+                        }
                     }
                 }
             }
-            return stickScore
+
+            // High score requires both shaft presence and felt flanks
+            return if (shaftMatches >= 3 && flankFeltMatches >= 3) {
+                shaftMatches * 2.0f + flankFeltMatches * 1.5f
+            } else {
+                0f
+            }
+        }
+
+        // Scan 360° around cue ball in 2° increments
+        var bestStickAngle = 0f
+        var bestStickScore = 0f
+
+        var deg = 0
+        while (deg < 360) {
+            val rad = deg * degToRad
+            val score = scoreCueStickShaft(detectedCueX, detectedCueY, rad)
+            if (score > bestStickScore) {
+                bestStickScore = score
+                bestStickAngle = rad
+            }
+            deg += 2
         }
 
         var detectedAngle = smoothAngle
-        var hasValidAngle = false
-        val candidatePointsX = ArrayList<Float>(120)
-        val candidatePointsY = ArrayList<Float>(120)
+        var hasValidStick = false
 
-        // 1. DUAL-TRACKER LAYER A: Scan 360° for Cue Stick behind the cue ball (Failsafe)
-        var maxStickScore = -1f
-        var bestStickAngle = smoothAngle + piF
-        var sDeg = 0
-        while (sDeg < 360) {
-            val sRad = sDeg * degToRad
-            val sScore = scoreCueStickAtAngle(detectedCueX, detectedCueY, sRad)
-            if (sScore > maxStickScore) {
-                maxStickScore = sScore
-                bestStickAngle = sRad
+        // Threshold check: at least 11.0 score indicates a clear cue stick behind the cue ball
+        if (bestStickScore >= 11.0f) {
+            // Fine sub-degree sweep (+/- 3° in 0.25° steps)
+            var fineAngle = bestStickAngle
+            var fineScore = bestStickScore
+            var dDeg = -3.0f
+            while (dDeg <= 3.0f) {
+                val fRad = bestStickAngle + dDeg * degToRad
+                val fScore = scoreCueStickShaft(detectedCueX, detectedCueY, fRad)
+                if (fScore > fineScore) {
+                    fineScore = fScore
+                    fineAngle = fRad
+                }
+                dDeg += 0.25f
             }
-            sDeg += 3
+
+            // Cue stick points FROM behind towards the cue ball, so ball travels opposite:
+            var aimAngle = fineAngle + piF
+            while (aimAngle < -piF) aimAngle += (2f * piF)
+            while (aimAngle > piF) aimAngle -= (2f * piF)
+
+            detectedAngle = aimAngle
+            hasValidStick = true
         }
 
-        var stickAimAngle = bestStickAngle - piF
-        while (stickAimAngle < -piF) stickAimAngle += (2f * piF)
-        while (stickAimAngle > piF) stickAimAngle -= (2f * piF)
-
-        if (isManualRingMode) {
-            // Option 3: Direct Ring Mode - Cue ball anchored, stick angle follows smooth tracking
-            hasValidAngle = maxStickScore >= 1.5f
-            detectedAngle = if (hasValidAngle) stickAimAngle else smoothAngle
-        } else {
-            // 2. DUAL-TRACKER LAYER B: Continuous Radial Raycast for Native Guideline Dots
-            val minR = ballRadiusEst * 1.10f
-            val maxR = ballRadiusEst * 6.50f
-            val rStep = maxOf(2.0f, ballRadiusEst * 0.16f)
-
-            var bestScore = -1f
-            var bestAng = stickAimAngle
-            val bestRayX = ArrayList<Float>(40)
-            val bestRayY = ArrayList<Float>(40)
-
-            var aDeg = 0
-            while (aDeg < 360) {
-                val rad = aDeg * degToRad
-                val cosA = cos(rad.toDouble()).toFloat()
-                val sinA = sin(rad.toDouble()).toFloat()
-
-                var whiteCount = 0
-                val tempX = ArrayList<Float>(30)
-                val tempY = ArrayList<Float>(30)
-
-                var rSweep = minR
-                while (rSweep <= maxR) {
-                    val px = (detectedCueX + rSweep * cosA).toInt()
-                    val py = (detectedCueY + rSweep * sinA).toInt()
-
-                    if (isWhiteLinePixel(px, py)) {
-                        whiteCount++
-                        tempX.add(px.toFloat())
-                        tempY.add(py.toFloat())
-                    } else {
-                        // Allow small gap of 1 sample (dashed white dot)
-                        if (whiteCount > 0 && rSweep < minR + rStep * 1.5f) {
-                            break
-                        }
-                    }
-                    rSweep += rStep
-                }
-
-                if (whiteCount >= 2) {
-                    val stickBackAngle = rad + piF
-                    val stickBackScore = scoreCueStickAtAngle(detectedCueX, detectedCueY, stickBackAngle)
-                    val score = whiteCount * (1.0f + stickBackScore * 1.2f)
-                    if (score > bestScore) {
-                        bestScore = score
-                        bestAng = rad
-                        bestRayX.clear()
-                        bestRayX.addAll(tempX)
-                        bestRayY.clear()
-                        bestRayY.addAll(tempY)
-                    }
-                }
-                aDeg += 2
-            }
-
-            if (bestScore >= 2.0f && bestRayX.size >= 2) {
-                // Sub-degree fine tuning (+/- 1.5 deg in 0.25 deg steps)
-                var fineBestScore = -1f
-                var fineBestAng = bestAng
-
-                var fineDeg = -1.5f
-                while (fineDeg <= 1.5f) {
-                    val fRad = bestAng + fineDeg * degToRad
-                    val fCos = cos(fRad.toDouble()).toFloat()
-                    val fSin = sin(fRad.toDouble()).toFloat()
-                    var fCount = 0
-                    var rSweep = minR
-                    while (rSweep <= maxR) {
-                        val px = (detectedCueX + rSweep * fCos).toInt()
-                        val py = (detectedCueY + rSweep * fSin).toInt()
-                        if (isWhiteLinePixel(px, py)) {
-                            fCount++
-                        }
-                        rSweep += rStep
-                    }
-                    if (fCount > fineBestScore) {
-                        fineBestScore = fCount.toFloat()
-                        fineBestAng = fRad
-                    }
-                    fineDeg += 0.25f
-                }
-
-                candidatePointsX.addAll(bestRayX)
-                candidatePointsY.addAll(bestRayY)
-                detectedAngle = fineBestAng
-                hasValidAngle = true
-            } else if (maxStickScore >= 2.0f) {
-                // FAILSAFE: If dots are faint or absent, follow cue stick angle with 100% reliability!
-                detectedAngle = stickAimAngle
-                hasValidAngle = true
-            }
-        }
-
-        if (hasValidAngle) {
+        // Hysteresis & State Update
+        if (hasValidStick) {
+            aimConfidenceFrames = minOf(6, aimConfidenceFrames + 2)
             var diff = detectedAngle - smoothAngle
             while (diff < -piF) diff += (2f * piF)
             while (diff > piF) diff -= (2f * piF)
 
-            val alpha = if (abs(diff) > 0.12f) 0.85f else 0.50f
+            val alpha = if (abs(diff) > 0.12f) 0.85f else 0.55f
             smoothAngle += diff * alpha
             while (smoothAngle < -piF) smoothAngle += (2f * piF)
             while (smoothAngle > piF) smoothAngle -= (2f * piF)
             lockFrames++
+        } else {
+            // If stick is missing (e.g. shot released, ball rolling, opponent turn), immediately drop confidence
+            aimConfidenceFrames = maxOf(0, aimConfidenceFrames - 2)
+            lockFrames = 0
         }
 
-        // Works everywhere on the table including cushions - ALWAYS ACTIVE during aiming
-        val isAimingFound = hasValidAngle || isManualRingMode || (lockFrames > 0)
-        if (isAimingFound && detectedCueX in 0f..width.toFloat() && detectedCueY in 0f..height.toFloat()) {
-            aimConfidenceFrames = minOf(6, aimConfidenceFrames + 2)
-        } else {
-            aimConfidenceFrames = maxOf(0, aimConfidenceFrames - 1)
-        }
-        isAimingActive = true // Keep aiming lines visible permanently without blinking
+        // Crucial: Only active when confidence >= 2
+        isAimingActive = (aimConfidenceFrames >= 2)
 
         // =========================================================================
         // STEP 5: RAY-CASTING TO FIND TARGET OBJECT BALL (ACCURATE COLLISION)
@@ -1021,14 +952,14 @@ class ScreenAimTracker(
         }
 
         // =========================================================================
-        // STEP 6: CUE POWER SLIDER ON LEFT RAIL (0.15 to 1.00)
+        // STEP 6: CUE POWER SLIDER ON LEFT RAIL (0.0 to 1.0)
         // =========================================================================
         val sliderX = (width * 0.05f).toInt()
         val sliderY1 = (height * 0.20f).toInt()
         val sliderY2 = (height * 0.80f).toInt()
         var pulledCount = 0
 
-        for (y in sliderY1..sliderY2 step 6) {
+        for (y in sliderY1..sliderY2 step 4) {
             val c = getPixelPacked(buffer, sliderX, y, rowStride, pixelStride, width, height)
             val r = (c shr 16) and 0xFF
             val gCol = (c shr 8) and 0xFF
@@ -1038,12 +969,12 @@ class ScreenAimTracker(
             }
         }
 
-        val powerTarget = if (pulledCount > 2) {
-            (pulledCount / 14f).coerceIn(0.20f, 1.0f)
+        val powerTarget = if (pulledCount >= 3) {
+            (pulledCount / 18f).coerceIn(0.20f, 1.0f)
         } else {
-            0.85f
+            0.0f
         }
-        smoothPower += (powerTarget - smoothPower) * 0.25f
+        smoothPower += (powerTarget - smoothPower) * 0.35f
 
         // =========================================================================
         // STEP 7: IN-GAME SPIN (ENGLISH) WIDGET DETECTOR

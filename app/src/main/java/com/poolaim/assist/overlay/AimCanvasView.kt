@@ -658,18 +658,9 @@ class AimCanvasView(context: Context) : View(context) {
             return // During setup, only display table calibration guides!
         }
 
-        // 1. Draw Table Cushions (Rails where bank shots bounce!)
-        if (showTableCushions) {
-            canvas.drawRect(tableBounds, cushionBorderPaint)
-        }
-
-        // 2. Draw 6 Pockets Rim (Scales with table and pocketScale)
-        val pocketVisualRadius = ballRadius * 1.55f * pocketScale
-        for (p in pockets) {
-            canvas.drawCircle(p.x, p.y, pocketVisualRadius, pocketInnerFillPaint)
-            canvas.drawCircle(p.x, p.y, pocketVisualRadius, pocketMarkerPaint)
-            canvas.drawCircle(p.x, p.y, 4f, pocketMarkerPaint)
-        }
+        // AIMING MASTER MANDATORY RULE:
+        // If player is NOT actively aiming (cue stick missing / player shot / balls moving / opponent turn) -> Draw NOTHING!
+        if (!isAimingActive) return
 
         // =========================================================================
         // AIMING MASTER DIRECT VECTOR ENGINE (ZERO-FREEZE, ZERO-LAG)
@@ -736,10 +727,12 @@ class AimCanvasView(context: Context) : View(context) {
                     val whiteEnd = raycastCushion(targetCushion.hitPoint, whiteRebound)?.hitPoint ?: (targetCushion.hitPoint + whiteRebound * 500f)
                     canvas.drawLine(targetCushion.hitPoint.x, targetCushion.hitPoint.y, whiteEnd.x, whiteEnd.y, firstBankPaint)
 
-                    // DYNAMIC YELLOW LINE (Power & Force Adjusted Cushion Line!)
-                    val yellowEnd = raycastCushion(targetCushion.hitPoint, yellowRebound)?.hitPoint ?: (targetCushion.hitPoint + yellowRebound * 500f)
-                    canvas.drawLine(targetCushion.hitPoint.x, targetCushion.hitPoint.y, yellowEnd.x, yellowEnd.y, dynamicYellowReboundPaint)
-                    canvas.drawCircle(yellowEnd.x, yellowEnd.y, ballRadius, dynamicYellowGhostPaint)
+                    // DYNAMIC YELLOW LINE (Power & Force Adjusted Cushion Line - Only when pulling cue!)
+                    if (shotPowerPercent > 0.08f) {
+                        val yellowEnd = raycastCushion(targetCushion.hitPoint, yellowRebound)?.hitPoint ?: (targetCushion.hitPoint + yellowRebound * 500f)
+                        canvas.drawLine(targetCushion.hitPoint.x, targetCushion.hitPoint.y, yellowEnd.x, yellowEnd.y, dynamicYellowReboundPaint)
+                        canvas.drawCircle(yellowEnd.x, yellowEnd.y, ballRadius, dynamicYellowGhostPaint)
+                    }
                 }
             }
         } else if (cushionHit != null) {
@@ -769,20 +762,22 @@ class AimCanvasView(context: Context) : View(context) {
             }
 
             // 3. DYNAMIC YELLOW REBOUND LINE (Moves with cue stick pull power!)
-            val yellowTarget = raycastBalls(cushionHit.hitPoint, yellowRebound)
-            if (yellowTarget != null) {
-                // Yellow path to target ball (offset based on power compression!)
-                canvas.drawLine(cushionHit.hitPoint.x, cushionHit.hitPoint.y, yellowTarget.ghostCenter.x, yellowTarget.ghostCenter.y, dynamicYellowReboundPaint)
-                canvas.drawCircle(yellowTarget.ghostCenter.x, yellowTarget.ghostCenter.y, ballRadius, dynamicYellowGhostPaint)
+            if (shotPowerPercent > 0.08f) {
+                val yellowTarget = raycastBalls(cushionHit.hitPoint, yellowRebound)
+                if (yellowTarget != null) {
+                    // Yellow path to target ball (offset based on power compression!)
+                    canvas.drawLine(cushionHit.hitPoint.x, cushionHit.hitPoint.y, yellowTarget.ghostCenter.x, yellowTarget.ghostCenter.y, dynamicYellowReboundPaint)
+                    canvas.drawCircle(yellowTarget.ghostCenter.x, yellowTarget.ghostCenter.y, ballRadius, dynamicYellowGhostPaint)
 
-                // Resultant yellow line from target ball
-                val dirYellowPocket = (yellowTarget.ballCenter - yellowTarget.ghostCenter).normalized()
-                val yEnd = raycastCushion(yellowTarget.ballCenter, dirYellowPocket)?.hitPoint ?: (yellowTarget.ballCenter + dirYellowPocket * 550f)
-                canvas.drawLine(yellowTarget.ballCenter.x, yellowTarget.ballCenter.y, yEnd.x, yEnd.y, dynamicYellowReboundPaint)
-            } else {
-                val yellowEnd = raycastCushion(cushionHit.hitPoint, yellowRebound)?.hitPoint ?: (cushionHit.hitPoint + yellowRebound * 600f)
-                canvas.drawLine(cushionHit.hitPoint.x, cushionHit.hitPoint.y, yellowEnd.x, yellowEnd.y, dynamicYellowReboundPaint)
-                canvas.drawCircle(yellowEnd.x, yellowEnd.y, ballRadius, dynamicYellowGhostPaint)
+                    // Resultant yellow line from target ball
+                    val dirYellowPocket = (yellowTarget.ballCenter - yellowTarget.ghostCenter).normalized()
+                    val yEnd = raycastCushion(yellowTarget.ballCenter, dirYellowPocket)?.hitPoint ?: (yellowTarget.ballCenter + dirYellowPocket * 550f)
+                    canvas.drawLine(yellowTarget.ballCenter.x, yellowTarget.ballCenter.y, yEnd.x, yEnd.y, dynamicYellowReboundPaint)
+                } else {
+                    val yellowEnd = raycastCushion(cushionHit.hitPoint, yellowRebound)?.hitPoint ?: (cushionHit.hitPoint + yellowRebound * 600f)
+                    canvas.drawLine(cushionHit.hitPoint.x, cushionHit.hitPoint.y, yellowEnd.x, yellowEnd.y, dynamicYellowReboundPaint)
+                    canvas.drawCircle(yellowEnd.x, yellowEnd.y, ballRadius, dynamicYellowGhostPaint)
+                }
             }
         }
 
@@ -805,11 +800,6 @@ class AimCanvasView(context: Context) : View(context) {
         canvas.drawCircle(cueBallPos.x, cueBallPos.y, ringRadius, cueAnchorRingPaint)
         canvas.drawCircle(cueBallPos.x, cueBallPos.y, ballRadius * 0.40f, ghostBallPaint)
         canvas.drawCircle(cueBallPos.x, cueBallPos.y, 4f, cueAnchorCorePaint)
-
-        // Draw Cue Force & Power HUD Indicator (Aiming Master Style)
-        val powerPercentDisplay = (shotPowerPercent * 100).toInt()
-        val hudText = "⚡ Force: $cueForceLevel | Power: $powerPercentDisplay%"
-        canvas.drawText(hudText, tableBounds.centerX() - 100f, tableBounds.top + 32f, powerBadgeTextPaint)
     }
 
     private data class CushionRayHit(

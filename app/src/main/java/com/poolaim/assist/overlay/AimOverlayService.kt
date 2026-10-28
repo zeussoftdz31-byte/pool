@@ -294,14 +294,14 @@ class AimOverlayService : Service(), SensorEventListener {
                 layoutCollapsedBadge?.visibility = View.GONE
                 layoutExpandedMenu?.visibility = View.VISIBLE
                 modMenuParams?.width = expandedWidth
-                modMenuParams?.height = expandedHeight
+                modMenuParams?.height = WindowManager.LayoutParams.WRAP_CONTENT
                 modMenuView?.let { windowManager.updateViewLayout(it, modMenuParams) }
             }
 
             // Drag Header of Expanded Menu
             setupDragTouch(layoutHeaderDrag) {}
 
-            // Click Minimize -> Collapse into 🎯 Badge
+            // Click Minimize -> Collapse into 8-Ball Badge
             btnMinimizeMenu?.setOnClickListener {
                 layoutExpandedMenu?.visibility = View.GONE
                 layoutCollapsedBadge?.visibility = View.VISIBLE
@@ -311,292 +311,138 @@ class AimOverlayService : Service(), SensorEventListener {
             }
 
             // ========================================================
-            // WIZARD iOS TAB NAVIGATION
+            // AIMING MASTER VIEWS & CONTROLS
             // ========================================================
-            val btnTabVisuals = modMenuView?.findViewById<View>(R.id.btnTabVisuals)
-            val btnTabAimMenu = modMenuView?.findViewById<View>(R.id.btnTabAimMenu)
-            val btnTabSettings = modMenuView?.findViewById<View>(R.id.btnTabSettings)
+            val appSettings = AppSettings.get(this)
+            val viewAimingMasterMain = modMenuView?.findViewById<View>(R.id.viewAimingMasterMain)
+            val viewCueForcePicker = modMenuView?.findViewById<View>(R.id.viewCueForcePicker)
+            val btnTryPremium = modMenuView?.findViewById<View>(R.id.btnTryPremium)
+            val cardCueForce = modMenuView?.findViewById<View>(R.id.cardCueForce)
+            val layoutSegmentedBarMain = modMenuView?.findViewById<android.widget.LinearLayout>(R.id.layoutSegmentedBarMain)
+            val tvCueForceValue = modMenuView?.findViewById<TextView>(R.id.tvCueForceValue)
+            val switchCushionShots = modMenuView?.findViewById<SwitchCompat>(R.id.switchCushionShots)
+            val switchThreeLines = modMenuView?.findViewById<SwitchCompat>(R.id.switchThreeLines)
+            val btnCloseForcePicker = modMenuView?.findViewById<View>(R.id.btnCloseForcePicker)
+            val colForceEven = modMenuView?.findViewById<android.widget.LinearLayout>(R.id.colForceEven)
+            val colForceOdd = modMenuView?.findViewById<android.widget.LinearLayout>(R.id.colForceOdd)
 
-            val tvTabVisualsText = modMenuView?.findViewById<TextView>(R.id.tvTabVisualsText)
-            val tvTabAimText = modMenuView?.findViewById<TextView>(R.id.tvTabAimText)
-            val tvTabSettingsText = modMenuView?.findViewById<TextView>(R.id.tvTabSettingsText)
+            btnTryPremium?.setOnClickListener {
+                Toast.makeText(this, "⭐ Aiming Master Premium Is Active & Unlocked!", Toast.LENGTH_SHORT).show()
+            }
 
-            val layoutContentVisuals = modMenuView?.findViewById<View>(R.id.layoutContentVisuals)
-            val layoutContentAim = modMenuView?.findViewById<View>(R.id.layoutContentAim)
-            val layoutContentSettings = modMenuView?.findViewById<View>(R.id.layoutContentSettings)
-            val tvCurrentTabTitle = modMenuView?.findViewById<TextView>(R.id.tvCurrentTabTitle)
-
-            fun switchTab(tabIndex: Int) {
-                btnTabVisuals?.setBackgroundResource(0)
-                btnTabAimMenu?.setBackgroundResource(0)
-                btnTabSettings?.setBackgroundResource(0)
-
-                tvTabVisualsText?.setTextColor(Color.parseColor("#94A3B8"))
-                tvTabAimText?.setTextColor(Color.parseColor("#94A3B8"))
-                tvTabSettingsText?.setTextColor(Color.parseColor("#94A3B8"))
-
-                layoutContentVisuals?.visibility = View.GONE
-                layoutContentAim?.visibility = View.GONE
-                layoutContentSettings?.visibility = View.GONE
-
-                when (tabIndex) {
-                    0 -> { // Visuals (Active by default)
-                        btnTabVisuals?.setBackgroundResource(R.drawable.bg_tab_active)
-                        tvTabVisualsText?.setTextColor(Color.parseColor("#38BDF8"))
-                        layoutContentVisuals?.visibility = View.VISIBLE
-                        tvCurrentTabTitle?.text = "Visuals"
+            fun populateSegmentedBar(container: android.widget.LinearLayout?, level: Int, barW: Int, barH: Int, margin: Int) {
+                container?.removeAllViews()
+                for (i in 0..11) {
+                    val seg = View(this).apply {
+                        val lp = android.widget.LinearLayout.LayoutParams((barW * density).toInt(), (barH * density).toInt()).apply {
+                            marginEnd = (margin * density).toInt()
+                        }
+                        layoutParams = lp
+                        val color = if (i <= level) {
+                            if (level == 11 && i == 11) Color.parseColor("#38BDF8") else Color.parseColor("#22C55E")
+                        } else {
+                            Color.parseColor("#374151")
+                        }
+                        setBackgroundColor(color)
                     }
-                    1 -> { // Aim Menu
-                        btnTabAimMenu?.setBackgroundResource(R.drawable.bg_tab_active)
-                        tvTabAimText?.setTextColor(Color.parseColor("#38BDF8"))
-                        layoutContentAim?.visibility = View.VISIBLE
-                        tvCurrentTabTitle?.text = "Aim"
+                    container?.addView(seg)
+                }
+            }
+
+            fun updateMainCueForceDisplay() {
+                val current = appSettings.cueForceLevel
+                tvCueForceValue?.text = current.toString()
+                populateSegmentedBar(layoutSegmentedBarMain, current, barW = 4, barH = 14, margin = 2)
+            }
+
+            fun populateCueForcePicker() {
+                colForceEven?.removeAllViews()
+                colForceOdd?.removeAllViews()
+
+                val evens = listOf(0, 2, 4, 6, 8, 10)
+                val odds = listOf(1, 3, 5, 7, 9, 11)
+
+                fun addCardToCol(targetCol: android.widget.LinearLayout?, forceVal: Int) {
+                    val isSelected = (forceVal == appSettings.cueForceLevel)
+                    val card = android.widget.LinearLayout(this).apply {
+                        orientation = android.widget.LinearLayout.HORIZONTAL
+                        gravity = Gravity.CENTER_VERTICAL
+                        val lp = android.widget.LinearLayout.LayoutParams(
+                            android.widget.LinearLayout.LayoutParams.MATCH_PARENT,
+                            (38 * density).toInt()
+                        ).apply {
+                            bottomMargin = (6 * density).toInt()
+                        }
+                        layoutParams = lp
+                        setPadding((10 * density).toInt(), (4 * density).toInt(), (10 * density).toInt(), (4 * density).toInt())
+                        setBackgroundResource(if (isSelected) R.drawable.bg_cue_force_item_selected else R.drawable.bg_cue_force_item)
+                        isClickable = true
+                        isFocusable = true
+
+                        // Force Text
+                        val tv = TextView(this@AimOverlayService).apply {
+                            text = "Force $forceVal"
+                            setTextColor(Color.parseColor("#F8FAFC"))
+                            textSize = 12f
+                            typeface = android.graphics.Typeface.DEFAULT_BOLD
+                            val tlp = android.widget.LinearLayout.LayoutParams(0, android.widget.LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+                            layoutParams = tlp
+                        }
+                        addView(tv)
+
+                        // Mini Bar
+                        val miniBar = android.widget.LinearLayout(this@AimOverlayService).apply {
+                            orientation = android.widget.LinearLayout.HORIZONTAL
+                            gravity = Gravity.CENTER_VERTICAL
+                        }
+                        populateSegmentedBar(miniBar, forceVal, barW = 3, barH = 10, margin = 1)
+                        addView(miniBar)
+
+                        setOnClickListener {
+                            appSettings.cueForceLevel = forceVal
+                            canvasView?.cueForceLevel = forceVal
+                            updateMainCueForceDisplay()
+                            viewCueForcePicker?.visibility = View.GONE
+                            viewAimingMasterMain?.visibility = View.VISIBLE
+                        }
                     }
-                    2 -> { // Settings
-                        btnTabSettings?.setBackgroundResource(R.drawable.bg_tab_active)
-                        tvTabSettingsText?.setTextColor(Color.parseColor("#38BDF8"))
-                        layoutContentSettings?.visibility = View.VISIBLE
-                        tvCurrentTabTitle?.text = "Settings"
-                    }
+                    targetCol?.addView(card)
                 }
+
+                for (f in evens) addCardToCol(colForceEven, f)
+                for (f in odds) addCardToCol(colForceOdd, f)
             }
 
-            btnTabVisuals?.setOnClickListener { switchTab(0) }
-            btnTabAimMenu?.setOnClickListener { switchTab(1) }
-            btnTabSettings?.setOnClickListener { switchTab(2) }
+            // Initial display
+            updateMainCueForceDisplay()
 
-            // ========================================================
-            // TAB 1: VISUALS (Table Zoom, Pocket Size, D-Pad, Auto-Fit)
-            // ========================================================
-            val tvModeTitle = modMenuView?.findViewById<TextView>(R.id.tvModeTitle)
-            val tvModeSubtitle = modMenuView?.findViewById<TextView>(R.id.tvModeSubtitle)
-            val switchCalibrationMode = modMenuView?.findViewById<SwitchCompat>(R.id.switchCalibrationMode)
-            val btnSaveCalibration = modMenuView?.findViewById<View>(R.id.btnSaveCalibration)
-
-            fun updateModeLabels(isCalibration: Boolean) {
-                if (isCalibration) {
-                    tvModeTitle?.text = "🎯 وضع إعداد ومعايرة الطاولة (Setup Mode)"
-                    tvModeTitle?.setTextColor(Color.parseColor("#FF1744"))
-                    tvModeSubtitle?.text = "طابق الحواف والجيوب الحمراء مع اللعبة في وضع التمرين ثم اضغط حفظ"
-                } else {
-                    tvModeTitle?.text = "🎮 وضع اللعب المباشر (Play Mode)"
-                    tvModeTitle?.setTextColor(Color.parseColor("#10B981"))
-                    tvModeSubtitle?.text = "الخطوط تظهر تلقائياً وبدقة 100% بمجرد ظهور الخط الأبيض من العصا"
-                }
+            // Open Cue Force Picker
+            cardCueForce?.setOnClickListener {
+                populateCueForcePicker()
+                viewAimingMasterMain?.visibility = View.GONE
+                viewCueForcePicker?.visibility = View.VISIBLE
             }
 
-            switchCalibrationMode?.isChecked = canvasView?.isCalibrationModeActive ?: false
-            updateModeLabels(switchCalibrationMode?.isChecked ?: false)
-
-            switchCalibrationMode?.setOnCheckedChangeListener { _, isChecked ->
-                canvasView?.isCalibrationModeActive = isChecked
-                updateModeLabels(isChecked)
-                canvasView?.postInvalidate()
+            // Close Cue Force Picker
+            btnCloseForcePicker?.setOnClickListener {
+                viewCueForcePicker?.visibility = View.GONE
+                viewAimingMasterMain?.visibility = View.VISIBLE
             }
 
-            btnSaveCalibration?.setOnClickListener {
-                canvasView?.saveCalibration(markAsUserSaved = true)
-                canvasView?.isCalibrationModeActive = false
-                switchCalibrationMode?.isChecked = false
-                updateModeLabels(false)
-                canvasView?.postInvalidate()
-                canvasView?.tableBounds?.let { b ->
-                    aimTracker?.setCalibratedTableBounds(b)
-                }
-                Toast.makeText(this, "✅ تم تثبيت الأبعاد بنجاح! تم تفعيل وضع اللعب المباشر (تظهر الخطوط مع خط العصا الأبيض) 🎯", Toast.LENGTH_LONG).show()
-            }
-
-            val seekTableZoom = modMenuView?.findViewById<SeekBar>(R.id.seekTableZoom)
-            val tvTableZoomVal = modMenuView?.findViewById<TextView>(R.id.tvTableZoomVal)
-            val seekPocketSize = modMenuView?.findViewById<SeekBar>(R.id.seekPocketSize)
-            val tvPocketSizeVal = modMenuView?.findViewById<TextView>(R.id.tvPocketSizeVal)
-            val btnCalibLeft = modMenuView?.findViewById<View>(R.id.btnCalibLeft)
-            val btnCalibRight = modMenuView?.findViewById<View>(R.id.btnCalibRight)
-            val btnCalibUp = modMenuView?.findViewById<View>(R.id.btnCalibUp)
-            val btnCalibDown = modMenuView?.findViewById<View>(R.id.btnCalibDown)
-            val btnResetCalib = modMenuView?.findViewById<View>(R.id.btnResetCalib)
-            val btnAutoFitDpi = modMenuView?.findViewById<View>(R.id.btnAutoFitDpi)
-            val switchMasterAim = modMenuView?.findViewById<SwitchCompat>(R.id.switchMasterAim)
-            val switchShowCushions = modMenuView?.findViewById<SwitchCompat>(R.id.switchShowCushions)
-
-            val initialZoom = canvasView?.tableZoom ?: 1.0f
-            seekTableZoom?.progress = ((initialZoom - 0.35f) * 100f).toInt().coerceIn(0, 135)
-            tvTableZoomVal?.text = "${(initialZoom * 100).toInt()}%"
-
-            seekTableZoom?.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
-                override fun onProgressChanged(sb: SeekBar?, progress: Int, fromUser: Boolean) {
-                    val zoom = 0.35f + (progress / 100f)
-                    tvTableZoomVal?.text = "${(zoom * 100).toInt()}%"
-                    canvasView?.setTableZoomValue(zoom)
-                }
-                override fun onStartTrackingTouch(sb: SeekBar?) {}
-                override fun onStopTrackingTouch(sb: SeekBar?) {}
-            })
-
-            val initialPocketScale = canvasView?.pocketScale ?: 1.0f
-            seekPocketSize?.progress = ((initialPocketScale - 0.40f) * 100f).toInt().coerceIn(0, 210)
-            tvPocketSizeVal?.text = "${(initialPocketScale * 100).toInt()}%"
-
-            seekPocketSize?.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
-                override fun onProgressChanged(sb: SeekBar?, progress: Int, fromUser: Boolean) {
-                    val pScale = 0.40f + (progress / 100f)
-                    tvPocketSizeVal?.text = "${(pScale * 100).toInt()}%"
-                    canvasView?.setPocketScaleValue(pScale)
-                }
-                override fun onStartTrackingTouch(sb: SeekBar?) {}
-                override fun onStopTrackingTouch(sb: SeekBar?) {}
-            })
-
-            // Table Position D-Pad adjustments
-            btnCalibLeft?.setOnClickListener { canvasView?.adjustCalibration(-8f, 0f, 0f, 0f, 0f, 0f) }
-            btnCalibRight?.setOnClickListener { canvasView?.adjustCalibration(8f, 0f, 0f, 0f, 0f, 0f) }
-            btnCalibUp?.setOnClickListener { canvasView?.adjustCalibration(0f, -8f, 0f, 0f, 0f, 0f) }
-            btnCalibDown?.setOnClickListener { canvasView?.adjustCalibration(0f, 8f, 0f, 0f, 0f, 0f) }
-
-            btnResetCalib?.setOnClickListener {
-                canvasView?.resetCalibration()
-                seekTableZoom?.progress = 65
-                seekPocketSize?.progress = 60
-                switchShowCushions?.isChecked = true
-                tvTableZoomVal?.text = "100%"
-                tvPocketSizeVal?.text = "100%"
-                Toast.makeText(this, "تمت إعادة ضبط الطاولة والجيوب بنجاح", Toast.LENGTH_SHORT).show()
-            }
-
-            btnAutoFitDpi?.setOnClickListener {
-                val size = Point()
-                windowManager.defaultDisplay.getRealSize(size)
-                canvasView?.autoFitToScreen(size.x, size.y)
-                seekTableZoom?.progress = 65
-                seekPocketSize?.progress = 60
-                tvTableZoomVal?.text = "100%"
-                tvPocketSizeVal?.text = "100%"
-                Toast.makeText(this, "🎯 تم ضبط الأبعاد والمقاييس تلقائياً حسب الشاشة", Toast.LENGTH_SHORT).show()
-            }
-
-            switchShowCushions?.isChecked = canvasView?.showTableCushions ?: true
-            switchShowCushions?.setOnCheckedChangeListener { _, isChecked ->
-                canvasView?.showTableCushions = isChecked
-                canvasView?.saveCalibration()
-                canvasView?.postInvalidate()
-            }
-
-            switchMasterAim?.setOnCheckedChangeListener { _, isChecked ->
-                canvasView?.let {
-                    it.isMasterOverlayEnabled = isChecked
-                    it.visibility = if (isChecked) View.VISIBLE else View.GONE
-                    it.postInvalidate()
-                }
-                aimTracker?.isAutoTrackingEnabled = isChecked
-            }
-
-            // ========================================================
-            // TAB 2: AIM MENU CONTROLS
-            // ========================================================
-            val tvEngineModeStatus = modMenuView?.findViewById<TextView>(R.id.tvEngineModeStatus)
-            val switchOptionRay = modMenuView?.findViewById<SwitchCompat>(R.id.switchOptionRay)
-            val switchOptionMask = modMenuView?.findViewById<SwitchCompat>(R.id.switchOptionMask)
-            val switchOptionRing = modMenuView?.findViewById<SwitchCompat>(R.id.switchOptionRing)
-
-            var isUpdatingSwitches = false
-
-            fun syncEngineState() {
-                engineOptionRay = switchOptionRay?.isChecked ?: false
-                engineOptionMask = switchOptionMask?.isChecked ?: false
-                engineOptionRing = switchOptionRing?.isChecked ?: false
-
-                aimTracker?.enableRayContinuity = engineOptionRay
-                aimTracker?.enableBallMaskExclusion = engineOptionMask
-                aimTracker?.isManualRingMode = engineOptionRing
-                canvasView?.isManualRingMode = engineOptionRing
-
-                if (engineOptionRing) {
-                    tvEngineModeStatus?.text = "🧲 خيار 3 نشط: تم قفل الكرة وتعطيل التحليل البصري المتعدد"
-                    tvEngineModeStatus?.setTextColor(Color.parseColor("#00E5FF"))
-                } else if (engineOptionRay && engineOptionMask) {
-                    tvEngineModeStatus?.text = "✨ الوضع الفائق (1 + 2 معاً) نشط: دقة 100% بدون أي خطأ"
-                    tvEngineModeStatus?.setTextColor(Color.parseColor("#10B981"))
-                } else if (engineOptionRay) {
-                    tvEngineModeStatus?.text = "⚡ خيار 1 نشط: الشعاع المتصل وقفل العصا 180°"
-                    tvEngineModeStatus?.setTextColor(Color.parseColor("#38BDF8"))
-                } else if (engineOptionMask) {
-                    tvEngineModeStatus?.text = "🛡️ خيار 2 نشط: قناع حظر الكرات المخططة فقط"
-                    tvEngineModeStatus?.setTextColor(Color.parseColor("#F59E0B"))
-                } else {
-                    tvEngineModeStatus?.text = "⚠️ يرجى تفعيل خيار واحد على الأقل لضمان الدقة"
-                    tvEngineModeStatus?.setTextColor(Color.parseColor("#EF4444"))
-                }
-                canvasView?.postInvalidate()
-            }
-
-            switchOptionRing?.setOnCheckedChangeListener { _, isChecked ->
-                if (isUpdatingSwitches) return@setOnCheckedChangeListener
-                if (isChecked) {
-                    isUpdatingSwitches = true
-                    switchOptionRay?.isChecked = false
-                    switchOptionMask?.isChecked = false
-                    isUpdatingSwitches = false
-                }
-                syncEngineState()
-            }
-
-            switchOptionRay?.setOnCheckedChangeListener { _, isChecked ->
-                if (isUpdatingSwitches) return@setOnCheckedChangeListener
-                if (isChecked) {
-                    isUpdatingSwitches = true
-                    switchOptionRing?.isChecked = false
-                    isUpdatingSwitches = false
-                }
-                syncEngineState()
-            }
-
-            switchOptionMask?.setOnCheckedChangeListener { _, isChecked ->
-                if (isUpdatingSwitches) return@setOnCheckedChangeListener
-                if (isChecked) {
-                    isUpdatingSwitches = true
-                    switchOptionRing?.isChecked = false
-                    isUpdatingSwitches = false
-                }
-                syncEngineState()
-            }
-
-            syncEngineState()
-
-            val switchAutoAim = modMenuView?.findViewById<SwitchCompat>(R.id.switchAutoAim)
-            val switchCueBallPath = modMenuView?.findViewById<SwitchCompat>(R.id.switchCueBallPath)
-            val switchBankShots = modMenuView?.findViewById<SwitchCompat>(R.id.switchBankShots)
-            val seekAimPower = modMenuView?.findViewById<SeekBar>(R.id.seekAimPower)
-            val tvAimPowerVal = modMenuView?.findViewById<TextView>(R.id.tvAimPowerVal)
-
-            switchAutoAim?.setOnCheckedChangeListener { _, isChecked ->
-                canvasView?.let {
-                    it.isMasterOverlayEnabled = isChecked
-                    it.visibility = if (isChecked) View.VISIBLE else View.GONE
-                    it.postInvalidate()
-                }
-                aimTracker?.isAutoTrackingEnabled = isChecked
-            }
-
-            switchCueBallPath?.setOnCheckedChangeListener { _, isChecked ->
-                canvasView?.enableCueBallPath = isChecked
-                canvasView?.postInvalidate()
-            }
-
-            switchBankShots?.setOnCheckedChangeListener { _, isChecked ->
+            // Toggles
+            switchCushionShots?.isChecked = appSettings.isCushionShotsEnabled
+            canvasView?.enableBankShots = appSettings.isCushionShotsEnabled
+            switchCushionShots?.setOnCheckedChangeListener { _, isChecked ->
+                appSettings.isCushionShotsEnabled = isChecked
                 canvasView?.enableBankShots = isChecked
                 canvasView?.postInvalidate()
             }
 
-            val switchComboPhysics = modMenuView?.findViewById<androidx.appcompat.widget.SwitchCompat>(R.id.switchComboPhysics)
-            val switchSpinPhysics = modMenuView?.findViewById<androidx.appcompat.widget.SwitchCompat>(R.id.switchSpinPhysics)
-
-            switchComboPhysics?.setOnCheckedChangeListener { _, isChecked ->
-                canvasView?.enableComboShots = isChecked
-                canvasView?.postInvalidate()
-            }
-
-            switchSpinPhysics?.setOnCheckedChangeListener { _, isChecked ->
-                canvasView?.enableSpinPhysics = isChecked
+            switchThreeLines?.isChecked = appSettings.isThreeLinesEnabled
+            canvasView?.enableCueBallPath = appSettings.isThreeLinesEnabled
+            switchThreeLines?.setOnCheckedChangeListener { _, isChecked ->
+                appSettings.isThreeLinesEnabled = isChecked
+                canvasView?.enableCueBallPath = isChecked
                 canvasView?.postInvalidate()
             }
 
