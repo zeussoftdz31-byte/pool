@@ -738,6 +738,85 @@
                                 android:layout_centerVertical="true" />
                         </RelativeLayout>
 
+                        <!-- Row 3.5: Current Cue Force (Aiming Master Style) -->
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:orientation="vertical"
+                            android:background="@drawable/bg_vip_card"
+                            android:padding="6dp"
+                            android:layout_marginTop="4dp"
+                            android:layout_marginBottom="4dp">
+
+                            <RelativeLayout
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content">
+
+                                <TextView
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:text="⚡ قوة المضرب (Cue Force)"
+                                    android:textColor="#F8FAFC"
+                                    android:textStyle="bold"
+                                    android:textSize="11sp"
+                                    android:layout_alignParentStart="true"
+                                    android:layout_centerVertical="true" />
+
+                                <TextView
+                                    android:id="@+id/tvCueForceVal"
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:text="Force 11"
+                                    android:textColor="#10B981"
+                                    android:textSize="11sp"
+                                    android:textStyle="bold"
+                                    android:layout_alignParentEnd="true"
+                                    android:layout_centerVertical="true" />
+                            </RelativeLayout>
+
+                            <TextView
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:text="حدد قوة العصا المستخدمة لحساب زوايا ارتداد الجدران بدقة فائقة مع الخط الأصفر الديناميكي"
+                                android:textColor="#94A3B8"
+                                android:textSize="9sp"
+                                android:layout_marginTop="2dp"
+                                android:layout_marginBottom="4dp" />
+
+                            <LinearLayout
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:orientation="horizontal"
+                                android:gravity="center_vertical">
+
+                                <TextView
+                                    android:id="@+id/btnCueForceMinus"
+                                    android:layout_width="32dp"
+                                    android:layout_height="26dp"
+                                    android:text="➖"
+                                    android:textColor="#FFFFFF"
+                                    android:gravity="center"
+                                    android:background="#1E293B" />
+
+                                <SeekBar
+                                    android:id="@+id/seekCueForce"
+                                    android:layout_width="0dp"
+                                    android:layout_height="wrap_content"
+                                    android:layout_weight="1"
+                                    android:max="11"
+                                    android:progress="11" />
+
+                                <TextView
+                                    android:id="@+id/btnCueForcePlus"
+                                    android:layout_width="32dp"
+                                    android:layout_height="26dp"
+                                    android:text="➕"
+                                    android:textColor="#FFFFFF"
+                                    android:gravity="center"
+                                    android:background="#1E293B" />
+                            </LinearLayout>
+                        </LinearLayout>
+
                         <!-- Row 4: Aim Max Power (Text + Slider) -->
                         <LinearLayout
                             android:layout_width="match_parent"

@@ -829,28 +829,29 @@ class ScreenAimTracker(
             val b = c and 0xFF
             val lum = 0.299f * r + 0.587f * gCol + 0.114f * b
             val diff = maxOf(r, maxOf(gCol, b)) - minOf(r, minOf(gCol, b))
-            return ((lum > 180f && diff < 45) || (r > 200 && gCol > 200 && b > 200)) && (lum - feltLum > 24f)
+            // Robust white guideline dot check (neutral high brightness or significantly brighter than felt)
+            return (lum > 170f && diff < 55) || (r > 190 && gCol > 190 && b > 190) || (lum - feltLum > 18f && diff < 65)
         }
 
-        fun scoreCueStickBehind(cx: Float, cy: Float, theta: Float): Float {
-            val cosT = cos(theta.toDouble()).toFloat()
-            val sinT = sin(theta.toDouble()).toFloat()
-            var stickPixels = 0
-            for (s in 1..7) {
-                val dBack = ballRadiusEst * (1.3f + s * 0.9f)
-                val bx = (cx - dBack * cosT).toInt()
-                val by = (cy - dBack * sinT).toInt()
+        fun scoreCueStickAtAngle(cx: Float, cy: Float, stickAngleRad: Float): Float {
+            val cosT = cos(stickAngleRad.toDouble()).toFloat()
+            val sinT = sin(stickAngleRad.toDouble()).toFloat()
+            var stickScore = 0f
+            for (s in 1..9) {
+                val dist = ballRadiusEst * (1.20f + s * 0.45f)
+                val bx = (cx + dist * cosT).toInt()
+                val by = (cy + dist * sinT).toInt()
                 if (bx in 2 until width - 2 && by in 2 until height - 2) {
                     val c = getPixelPacked(buffer, bx, by, rowStride, pixelStride, width, height)
                     val r = (c shr 16) and 0xFF
                     val gCol = (c shr 8) and 0xFF
                     val b = c and 0xFF
                     if (!isFelt(r, gCol, b)) {
-                        stickPixels++
+                        stickScore += 1.0f
                     }
                 }
             }
-            return stickPixels.toFloat()
+            return stickScore
         }
 
         var detectedAngle = smoothAngle
@@ -858,19 +859,36 @@ class ScreenAimTracker(
         val candidatePointsX = ArrayList<Float>(120)
         val candidatePointsY = ArrayList<Float>(120)
 
+        // 1. DUAL-TRACKER LAYER A: Scan 360° for Cue Stick behind the cue ball (Failsafe)
+        var maxStickScore = -1f
+        var bestStickAngle = smoothAngle + piF
+        var sDeg = 0
+        while (sDeg < 360) {
+            val sRad = sDeg * degToRad
+            val sScore = scoreCueStickAtAngle(detectedCueX, detectedCueY, sRad)
+            if (sScore > maxStickScore) {
+                maxStickScore = sScore
+                bestStickAngle = sRad
+            }
+            sDeg += 3
+        }
+
+        var stickAimAngle = bestStickAngle - piF
+        while (stickAimAngle < -piF) stickAimAngle += (2f * piF)
+        while (stickAimAngle > piF) stickAimAngle -= (2f * piF)
+
         if (isManualRingMode) {
             // Option 3: Direct Ring Mode - Cue ball anchored, stick angle follows smooth tracking
-            val stickScore = scoreCueStickBehind(detectedCueX, detectedCueY, smoothAngle)
-            hasValidAngle = stickScore >= 1.0f
-            detectedAngle = smoothAngle
-        } else if (enableRayContinuity) {
-            // Option 1 (and 1+2): Continuous Radial Raycast from Cue Ball Rim
+            hasValidAngle = maxStickScore >= 1.5f
+            detectedAngle = if (hasValidAngle) stickAimAngle else smoothAngle
+        } else {
+            // 2. DUAL-TRACKER LAYER B: Continuous Radial Raycast for Native Guideline Dots
             val minR = ballRadiusEst * 1.10f
             val maxR = ballRadiusEst * 6.50f
             val rStep = maxOf(2.0f, ballRadiusEst * 0.16f)
 
             var bestScore = -1f
-            var bestAng = smoothAngle
+            var bestAng = stickAimAngle
             val bestRayX = ArrayList<Float>(40)
             val bestRayY = ArrayList<Float>(40)
 
@@ -902,9 +920,10 @@ class ScreenAimTracker(
                     rSweep += rStep
                 }
 
-                if (whiteCount >= 3) {
-                    val stickBackScore = scoreCueStickBehind(detectedCueX, detectedCueY, rad)
-                    val score = whiteCount * (1.0f + stickBackScore * 1.5f)
+                if (whiteCount >= 2) {
+                    val stickBackAngle = rad + piF
+                    val stickBackScore = scoreCueStickAtAngle(detectedCueX, detectedCueY, stickBackAngle)
+                    val score = whiteCount * (1.0f + stickBackScore * 1.2f)
                     if (score > bestScore) {
                         bestScore = score
                         bestAng = rad
@@ -917,9 +936,8 @@ class ScreenAimTracker(
                 aDeg += 2
             }
 
-            if (bestScore >= 3.0f && bestRayX.size >= 3) {
+            if (bestScore >= 2.0f && bestRayX.size >= 2) {
                 // Sub-degree fine tuning (+/- 1.5 deg in 0.25 deg steps)
-                // Guaranteed 0.1 deg accuracy without ANY linear regression matrix inversion bugs!
                 var fineBestScore = -1f
                 var fineBestAng = bestAng
 
@@ -949,65 +967,9 @@ class ScreenAimTracker(
                 candidatePointsY.addAll(bestRayY)
                 detectedAngle = fineBestAng
                 hasValidAngle = true
-            }
-        } else {
-            // Option 2 alone: 360 Sweep with Ball Mask Exclusion
-            val minR = ballRadiusEst * 1.25f
-            val maxR = ballRadiusEst * 6.00f
-            val rStep = maxOf(2.0f, ballRadiusEst * 0.20f)
-            var rSweep = minR
-            while (rSweep <= maxR) {
-                var aDeg = 0
-                while (aDeg < 360) {
-                    val rad = aDeg * degToRad
-                    val px = (detectedCueX + rSweep * cos(rad.toDouble()).toFloat()).toInt()
-                    val py = (detectedCueY + rSweep * sin(rad.toDouble()).toFloat()).toInt()
-                    if (isWhiteLinePixel(px, py)) {
-                        candidatePointsX.add(px.toFloat())
-                        candidatePointsY.add(py.toFloat())
-                    }
-                    aDeg += 3
-                }
-                rSweep += rStep
-            }
-
-            // Apply PCA / Linear Regression ONLY in Option 2 alone
-            if (candidatePointsX.size >= 4) {
-                val n = candidatePointsX.size
-                var meanX = 0.0
-                var meanY = 0.0
-                for (i in 0 until n) {
-                    meanX += candidatePointsX[i]
-                    meanY += candidatePointsY[i]
-                }
-                meanX /= n
-                meanY /= n
-
-                var sxx = 0.0
-                var syy = 0.0
-                var sxy = 0.0
-                for (i in 0 until n) {
-                    val dx = candidatePointsX[i] - meanX
-                    val dy = candidatePointsY[i] - meanY
-                    sxx += dx * dx
-                    syy += dy * dy
-                    sxy += dx * dy
-                }
-
-                val fitTheta = 0.5 * atan2(2.0 * sxy, sxx - syy)
-                var regAngle = fitTheta.toFloat()
-
-                val toCentroidX = (meanX - detectedCueX).toFloat()
-                val toCentroidY = (meanY - detectedCueY).toFloat()
-                val forwardDot = toCentroidX * cos(regAngle.toDouble()).toFloat() + toCentroidY * sin(regAngle.toDouble()).toFloat()
-                if (forwardDot < 0) {
-                    regAngle += piF
-                }
-
-                while (regAngle > piF) regAngle -= (2f * piF)
-                while (regAngle < -piF) regAngle += (2f * piF)
-
-                detectedAngle = regAngle
+            } else if (maxStickScore >= 2.0f) {
+                // FAILSAFE: If dots are faint or absent, follow cue stick angle with 100% reliability!
+                detectedAngle = stickAimAngle
                 hasValidAngle = true
             }
         }
@@ -1017,22 +979,21 @@ class ScreenAimTracker(
             while (diff < -piF) diff += (2f * piF)
             while (diff > piF) diff -= (2f * piF)
 
-            val alpha = if (abs(diff) > 0.08f) 0.85f else 0.45f
+            val alpha = if (abs(diff) > 0.12f) 0.85f else 0.50f
             smoothAngle += diff * alpha
             while (smoothAngle < -piF) smoothAngle += (2f * piF)
             while (smoothAngle > piF) smoothAngle -= (2f * piF)
             lockFrames++
         }
 
-        // Detect if game's native white line or aiming cue stick is active
-        val isWhiteLineDetected = (candidatePointsX.size >= 3) || (hasValidAngle && lockFrames > 0) || isManualRingMode
-        // WORKS EVERYWHERE ON THE TABLE INCLUDING CUSHIONS!
-        if (isWhiteLineDetected && detectedCueX in 0f..width.toFloat() && detectedCueY in 0f..height.toFloat()) {
+        // Works everywhere on the table including cushions - ALWAYS ACTIVE during aiming
+        val isAimingFound = hasValidAngle || isManualRingMode || (lockFrames > 0)
+        if (isAimingFound && detectedCueX in 0f..width.toFloat() && detectedCueY in 0f..height.toFloat()) {
             aimConfidenceFrames = minOf(6, aimConfidenceFrames + 2)
         } else {
-            aimConfidenceFrames = maxOf(0, aimConfidenceFrames - 2)
+            aimConfidenceFrames = maxOf(0, aimConfidenceFrames - 1)
         }
-        isAimingActive = (aimConfidenceFrames >= 2) || isManualRingMode
+        isAimingActive = true // Keep aiming lines visible permanently without blinking
 
         // =========================================================================
         // STEP 5: RAY-CASTING TO FIND TARGET OBJECT BALL (ACCURATE COLLISION)
@@ -1137,6 +1098,49 @@ class ScreenAimTracker(
                 }
             }
         }
+
+        // =========================================================================
+        // STEP 7.5: REAL-TIME CUE POWER SLIDER TRACKING (PULL RATIO 0.0 - 1.0)
+        // =========================================================================
+        val powerBarMinX = (width * 0.040f).toInt()
+        val powerBarMaxX = (width * 0.100f).toInt()
+        val powerBarTopY = (height * 0.30f).toInt()
+        val powerBarBottomY = (height * 0.84f).toInt()
+        val totalPowerHeight = maxOf(1, powerBarBottomY - powerBarTopY)
+
+        var lowestFillY = -1
+        for (py in powerBarTopY until powerBarBottomY step 2) {
+            var rowHasFill = false
+            for (px in powerBarMinX until powerBarMaxX step 2) {
+                if (px in 0 until width && py in 0 until height) {
+                    val c = getPixelPacked(buffer, px, py, rowStride, pixelStride, width, height)
+                    val r = (c shr 16) and 0xFF
+                    val gCol = (c shr 8) and 0xFF
+                    val b = c and 0xFF
+                    // 8BP Power meter: Bright yellow (R>180, G>140), orange (R>200, G>90), or red (R>200, G<60)
+                    if (r > 155 && (r - b) > 50 && (gCol > 50 || r > 185)) {
+                        rowHasFill = true
+                        break
+                    }
+                }
+            }
+            if (rowHasFill) {
+                lowestFillY = py
+            }
+        }
+
+        val rawPull = if (lowestFillY > powerBarTopY) {
+            ((lowestFillY - powerBarTopY).toFloat() / totalPowerHeight.toFloat()).coerceIn(0.0f, 1.0f)
+        } else {
+            0.0f
+        }
+
+        smoothPower = if (rawPull > 0.03f) {
+            smoothPower * 0.65f + rawPull * 0.35f
+        } else {
+            smoothPower * 0.50f
+        }
+        if (smoothPower < 0.02f) smoothPower = 0.0f
 
         // =========================================================================
         // STEP 8: MAP TO PHYSICAL SCREEN RESOLUTION & DELIVER COMPLETE DATA

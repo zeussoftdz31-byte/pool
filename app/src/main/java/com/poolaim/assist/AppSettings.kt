@@ -31,6 +31,7 @@ class AppSettings(context: Context) {
         const val KEY_TABLE_OFFSET_X = "table_offset_x"
         const val KEY_TABLE_OFFSET_Y = "table_offset_y"
         const val KEY_AUTO_MATCH_DETECTION = "auto_match_detection"
+        const val KEY_CUE_FORCE = "cue_force_level"
 
         // Color Presets
         val COLOR_CYAN = Color.parseColor("#00F5FF")
@@ -100,4 +101,8 @@ class AppSettings(context: Context) {
     var isAutoMatchDetectionEnabled: Boolean
         get() = prefs.getBoolean(KEY_AUTO_MATCH_DETECTION, true)
         set(value) = prefs.edit().putBoolean(KEY_AUTO_MATCH_DETECTION, value).apply()
+
+    var cueForceLevel: Int
+        get() = prefs.getInt(KEY_CUE_FORCE, 11) // Default to Force 11 (Max Cue Force)
+        set(value) = prefs.edit().putInt(KEY_CUE_FORCE, value.coerceIn(0, 11)).apply()
 }

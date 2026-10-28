@@ -216,6 +216,36 @@ class AimCanvasView(context: Context) : View(context) {
         pathEffect = DashPathEffect(floatArrayOf(10f, 10f), 0f)
     }
 
+    var cueForceLevel: Int = 11
+
+    private val dynamicYellowReboundPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = Color.parseColor("#FFEE00") // Vivid Neon Yellow matching Aiming Master
+        strokeWidth = 4.5f
+        style = Paint.Style.STROKE
+        strokeCap = Paint.Cap.ROUND
+    }
+
+    private val dynamicYellowGhostPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = Color.parseColor("#FFEE00")
+        strokeWidth = 3.0f
+        style = Paint.Style.STROKE
+        pathEffect = DashPathEffect(floatArrayOf(8f, 6f), 0f)
+    }
+
+    private val angleSplitBracketPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = Color.WHITE
+        strokeWidth = 2.5f
+        style = Paint.Style.STROKE
+        strokeCap = Paint.Cap.SQUARE
+    }
+
+    private val powerBadgeTextPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = Color.parseColor("#FFEE00")
+        textSize = 22f
+        typeface = Typeface.DEFAULT_BOLD
+        setShadowLayer(5f, 0f, 0f, Color.BLACK)
+    }
+
     private val cueAnchorRingPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = Color.parseColor("#B3FFFFFF")
         style = Paint.Style.STROKE
@@ -321,6 +351,7 @@ class AimCanvasView(context: Context) : View(context) {
         enableCueBallPath = settings.isThreeLinesEnabled
         enablePocketGlow = settings.isPocketLockEnabled
         pocketScale = settings.pocketScale
+        cueForceLevel = settings.cueForceLevel
         if (settings.tableOffsetX != 0f || settings.tableOffsetY != 0f) {
             offsetX = settings.tableOffsetX
             offsetY = settings.tableOffsetY
@@ -641,93 +672,121 @@ class AimCanvasView(context: Context) : View(context) {
         }
 
         // =========================================================================
-        // REAL-TIME MULTI-BODY BILLIARDS SIMULATOR
-        // Simulates Cue Ball, Primary Object Ball, Secondary Combo (Carom),
-        // Tertiary balls, felt friction, spin follow/draw/throw, and cushion banks.
+        // AIMING MASTER DIRECT VECTOR ENGINE (ZERO-FREEZE, ZERO-LAG)
+        // Computes direct aim lines, Ghost Ball, 90° angle split, combination shots,
+        // and Dynamic Yellow Rebound Line adjusted by shot power and cue force.
         // =========================================================================
-        val simResult = MultiBallSimulator.simulate(
-            cuePos = cueBallPos,
-            aimAngleRad = aimAngleRad,
-            powerPercent = shotPowerPercent,
-            spinX = currentSpinX,
-            spinY = currentSpinY,
-            objectBalls = allDetectedBalls,
-            tableBounds = tableBounds,
-            ballRadius = ballRadius,
-            pockets = pockets,
-            pocketScale = pocketScale,
-            enableBankShots = enableBankShots,
-            enableComboShots = enableComboShots,
-            enableSpinPhysics = enableSpinPhysics
-        )
+        val dirCue = Vector2D(cos(aimAngleRad.toDouble()).toFloat(), sin(aimAngleRad.toDouble()).toFloat()).normalized()
 
-        // Render each active ball's simulated trajectory
-        for (path in simResult.activePaths) {
-            if (path.points.size < 2) continue
+        // 1. Raycast Cushion for table bounds
+        val cushionHit = raycastCushion(cueBallPos, dirCue)
 
-            // Select distinctive color per ball role
-            val linePaint = when (path.roleOrder) {
-                0 -> directAimPaint // Cue Ball: Vivid Neon Cyan
-                1 -> targetTrajectoryPaint // Primary Hit Ball: Vivid Neon Green
-                2 -> comboTrajectoryPaint // Secondary Combo Ball: Vivid Neon Amber / Orange
-                else -> tertiaryTrajectoryPaint // Tertiary / Scatter: Vivid Neon Magenta / Purple
+        // 2. Raycast Balls for object ball impact
+        val ballHit = raycastBalls(cueBallPos, dirCue)
+
+        val isDirectBallShot = (ballHit != null) && (cushionHit == null || ballHit.dist < cushionHit.dist)
+
+        if (isDirectBallShot && ballHit != null) {
+            // =====================================================================
+            // SCENARIO 1: DIRECT SHOT ON OBJECT BALL (Images 2 & 3)
+            // =====================================================================
+            // 1. Solid line from cue ball to ghost impact point
+            canvas.drawLine(cueBallPos.x, cueBallPos.y, ballHit.ghostCenter.x, ballHit.ghostCenter.y, directAimPaint)
+
+            // 2. White Ghost Ball circle at impact position
+            canvas.drawCircle(ballHit.ghostCenter.x, ballHit.ghostCenter.y, ballRadius, ghostBallPaint)
+            canvas.drawCircle(ballHit.ghostCenter.x, ballHit.ghostCenter.y, 4f, cueAnchorCorePaint)
+
+            // 3. Separation vectors: Normal (Target Ball) & Tangent (Cue Deflection)
+            val dirTarget = (ballHit.ballCenter - ballHit.ghostCenter).normalized()
+            val dot = dirCue.dot(dirTarget)
+            val dirDeflect = (dirCue - dirTarget * dot).normalized()
+
+            // 4. White 90° angle split bracket at impact point
+            drawAngleBracket(canvas, ballHit.ghostCenter, dirTarget, dirDeflect)
+
+            // 5. Cue Ball deflection tangent line
+            if (enableCueBallPath) {
+                val cueDeflectEnd = raycastCushion(ballHit.ghostCenter, dirDeflect)?.hitPoint ?: (ballHit.ghostCenter + dirDeflect * 350f)
+                canvas.drawLine(ballHit.ghostCenter.x, ballHit.ghostCenter.y, cueDeflectEnd.x, cueDeflectEnd.y, cueTangentPaint)
             }
 
-            val stopPaint = when (path.roleOrder) {
-                0 -> cueStopMarkerPaint
-                1 -> targetStopMarkerPaint
-                2 -> comboStopMarkerPaint
-                else -> tertiaryStopMarkerPaint
-            }
+            // 6. Target Ball Path & Combination Shot
+            val comboHit = if (enableComboShots) raycastBalls(ballHit.ballCenter, dirTarget, ignoreBall = ballHit.ballCenter) else null
 
-            // 1. Draw multi-segment trajectory path
-            for (i in 0 until path.points.size - 1) {
-                val p1 = path.points[i]
-                val p2 = path.points[i + 1]
-                canvas.drawLine(p1.x, p1.y, p2.x, p2.y, linePaint)
-            }
+            if (comboHit != null) {
+                // Secondary Ball Collision (Combination Shot)
+                canvas.drawLine(ballHit.ballCenter.x, ballHit.ballCenter.y, comboHit.ghostCenter.x, comboHit.ghostCenter.y, targetTrajectoryPaint)
+                canvas.drawCircle(comboHit.ghostCenter.x, comboHit.ghostCenter.y, ballRadius, comboGhostBallPaint)
 
-            // 2. Draw ghost balls at all collision impact points
-            for (g in path.ghosts) {
-                val gPaint = if (path.roleOrder <= 1) ghostBallPaint else comboGhostBallPaint
-                canvas.drawCircle(g.x, g.y, ballRadius, gPaint)
-            }
-
-            // 3. Draw final resting stop position or pocket entry
-            if (path.isPotted) {
-                if (enablePocketGlow && path.potIndex in pockets.indices) {
-                    val p = pockets[path.potIndex]
-                    if (path.isCueBall) {
-                        // SCRATCH WARNING: Red alert on potted pocket
-                        canvas.drawCircle(p.x, p.y, ballRadius * 1.8f * pocketScale, scratchWarningPaint)
-                        canvas.drawCircle(p.x, p.y, ballRadius * 2.5f * pocketScale, scratchWarningPaint)
-                        canvas.drawLine(p.x - 14f, p.y - 14f, p.x + 14f, p.y + 14f, scratchWarningPaint)
-                        canvas.drawLine(p.x - 14f, p.y + 14f, p.x + 14f, p.y - 14f, scratchWarningPaint)
-                    } else {
-                        // Safe ball pot: double glowing rings
-                        canvas.drawCircle(p.x, p.y, ballRadius * 1.6f * pocketScale, pocketGlowPaint)
-                        canvas.drawCircle(p.x, p.y, ballRadius * 2.3f * pocketScale, pocketGlowPaint)
-                    }
-                }
+                val dirCombo = (comboHit.ballCenter - comboHit.ghostCenter).normalized()
+                val comboEnd = raycastCushion(comboHit.ballCenter, dirCombo)?.hitPoint ?: (comboHit.ballCenter + dirCombo * 550f)
+                canvas.drawLine(comboHit.ballCenter.x, comboHit.ballCenter.y, comboEnd.x, comboEnd.y, comboTrajectoryPaint)
             } else {
-                // Stopped on table: draw stop circle + center dot + glowing halo ring
-                canvas.drawCircle(path.stopX, path.stopY, ballRadius, stopPaint)
-                stopCenterDotPaint.color = linePaint.color
-                canvas.drawCircle(path.stopX, path.stopY, 4f, stopCenterDotPaint)
+                // Single Ball Shot to Pocket or Cushion
+                val targetCushion = raycastCushion(ballHit.ballCenter, dirTarget)
+                val targetEnd = targetCushion?.hitPoint ?: (ballHit.ballCenter + dirTarget * 650f)
+                canvas.drawLine(ballHit.ballCenter.x, ballHit.ballCenter.y, targetEnd.x, targetEnd.y, targetTrajectoryPaint)
 
-                stopGlowRingPaint.color = linePaint.color
-                canvas.drawCircle(path.stopX, path.stopY, ballRadius * 1.35f, stopGlowRingPaint)
+                // Cushion Bank Shot & Dynamic Yellow Line
+                if (enableBankShots && targetCushion != null) {
+                    val (whiteRebound, yellowRebound) = computeCushionRebound(dirTarget, targetCushion.normal, shotPowerPercent, cueForceLevel)
+
+                    // Reference white geometric rebound
+                    val whiteEnd = raycastCushion(targetCushion.hitPoint, whiteRebound)?.hitPoint ?: (targetCushion.hitPoint + whiteRebound * 500f)
+                    canvas.drawLine(targetCushion.hitPoint.x, targetCushion.hitPoint.y, whiteEnd.x, whiteEnd.y, firstBankPaint)
+
+                    // DYNAMIC YELLOW LINE (Power & Force Adjusted Cushion Line!)
+                    val yellowEnd = raycastCushion(targetCushion.hitPoint, yellowRebound)?.hitPoint ?: (targetCushion.hitPoint + yellowRebound * 500f)
+                    canvas.drawLine(targetCushion.hitPoint.x, targetCushion.hitPoint.y, yellowEnd.x, yellowEnd.y, dynamicYellowReboundPaint)
+                    canvas.drawCircle(yellowEnd.x, yellowEnd.y, ballRadius, dynamicYellowGhostPaint)
+                }
+            }
+        } else if (cushionHit != null) {
+            // =====================================================================
+            // SCENARIO 2: KICK SHOT / CUSHION-FIRST SHOT (Images 4 & 5)
+            // =====================================================================
+            // 1. Line from cue ball to cushion contact point
+            canvas.drawLine(cueBallPos.x, cueBallPos.y, cushionHit.hitPoint.x, cushionHit.hitPoint.y, directAimPaint)
+            canvas.drawCircle(cushionHit.hitPoint.x, cushionHit.hitPoint.y, ballRadius * 0.9f, ghostBallPaint)
+
+            val (whiteRebound, yellowRebound) = computeCushionRebound(dirCue, cushionHit.normal, shotPowerPercent, cueForceLevel)
+
+            // 2. White Geometric Rebound Line
+            val kickTarget = raycastBalls(cushionHit.hitPoint, whiteRebound)
+            if (kickTarget != null) {
+                // White path to target ball
+                canvas.drawLine(cushionHit.hitPoint.x, cushionHit.hitPoint.y, kickTarget.ghostCenter.x, kickTarget.ghostCenter.y, directAimPaint)
+                canvas.drawCircle(kickTarget.ghostCenter.x, kickTarget.ghostCenter.y, ballRadius, ghostBallPaint)
+
+                // Target ball to pocket
+                val dirToPocket = (kickTarget.ballCenter - kickTarget.ghostCenter).normalized()
+                val pocketEnd = raycastCushion(kickTarget.ballCenter, dirToPocket)?.hitPoint ?: (kickTarget.ballCenter + dirToPocket * 550f)
+                canvas.drawLine(kickTarget.ballCenter.x, kickTarget.ballCenter.y, pocketEnd.x, pocketEnd.y, directAimPaint)
+            } else {
+                val whiteEnd = raycastCushion(cushionHit.hitPoint, whiteRebound)?.hitPoint ?: (cushionHit.hitPoint + whiteRebound * 600f)
+                canvas.drawLine(cushionHit.hitPoint.x, cushionHit.hitPoint.y, whiteEnd.x, whiteEnd.y, firstBankPaint)
+            }
+
+            // 3. DYNAMIC YELLOW REBOUND LINE (Moves with cue stick pull power!)
+            val yellowTarget = raycastBalls(cushionHit.hitPoint, yellowRebound)
+            if (yellowTarget != null) {
+                // Yellow path to target ball (offset based on power compression!)
+                canvas.drawLine(cushionHit.hitPoint.x, cushionHit.hitPoint.y, yellowTarget.ghostCenter.x, yellowTarget.ghostCenter.y, dynamicYellowReboundPaint)
+                canvas.drawCircle(yellowTarget.ghostCenter.x, yellowTarget.ghostCenter.y, ballRadius, dynamicYellowGhostPaint)
+
+                // Resultant yellow line from target ball
+                val dirYellowPocket = (yellowTarget.ballCenter - yellowTarget.ghostCenter).normalized()
+                val yEnd = raycastCushion(yellowTarget.ballCenter, dirYellowPocket)?.hitPoint ?: (yellowTarget.ballCenter + dirYellowPocket * 550f)
+                canvas.drawLine(yellowTarget.ballCenter.x, yellowTarget.ballCenter.y, yEnd.x, yEnd.y, dynamicYellowReboundPaint)
+            } else {
+                val yellowEnd = raycastCushion(cushionHit.hitPoint, yellowRebound)?.hitPoint ?: (cushionHit.hitPoint + yellowRebound * 600f)
+                canvas.drawLine(cushionHit.hitPoint.x, cushionHit.hitPoint.y, yellowEnd.x, yellowEnd.y, dynamicYellowReboundPaint)
+                canvas.drawCircle(yellowEnd.x, yellowEnd.y, ballRadius, dynamicYellowGhostPaint)
             }
         }
 
-        // Optional 6-Pocket Guide Lines
-        if (showPocketGuides && targetBallPos != null) {
-            for (p in pockets) {
-                canvas.drawLine(targetBallPos!!.x, targetBallPos!!.y, p.x, p.y, pocketGuidePaint)
-            }
-        }
-
-        // 3. Draw In-Game Active Spin HUD Widget (دائرة الـ Spin الحالية مع موضع النقطة الحمراء)
+        // Draw In-Game Active Spin HUD Widget
         if (enableSpinPhysics && (abs(currentSpinX) > 0.05f || abs(currentSpinY) > 0.05f)) {
             val spinCenterR = ballRadius * 0.95f
             val spinHUDX = tableBounds.right - spinCenterR - 12f
@@ -736,16 +795,164 @@ class AimCanvasView(context: Context) : View(context) {
             canvas.drawCircle(spinHUDX, spinHUDY, spinCenterR, spinWidgetBallPaint)
             canvas.drawCircle(spinHUDX, spinHUDY, spinCenterR, spinWidgetBorderPaint)
 
-            // Red dot indicating strike point
             val dotX = spinHUDX + currentSpinX * (spinCenterR * 0.65f)
             val dotY = spinHUDY + currentSpinY * (spinCenterR * 0.65f)
             canvas.drawCircle(dotX, dotY, 4.5f, spinWidgetDotPaint)
         }
 
-        // Draw Cue Ball Origin Marker (الكرة البيضاء هي الأساس الثابت وقاعدة انطلاق الخطوط)
+        // Draw Cue Ball Origin Marker
         val ringRadius = if (isManualRingMode) ballRadius * 1.35f else ballRadius * 1.15f
         canvas.drawCircle(cueBallPos.x, cueBallPos.y, ringRadius, cueAnchorRingPaint)
         canvas.drawCircle(cueBallPos.x, cueBallPos.y, ballRadius * 0.40f, ghostBallPaint)
         canvas.drawCircle(cueBallPos.x, cueBallPos.y, 4f, cueAnchorCorePaint)
+
+        // Draw Cue Force & Power HUD Indicator (Aiming Master Style)
+        val powerPercentDisplay = (shotPowerPercent * 100).toInt()
+        val hudText = "⚡ Force: $cueForceLevel | Power: $powerPercentDisplay%"
+        canvas.drawText(hudText, tableBounds.centerX() - 100f, tableBounds.top + 32f, powerBadgeTextPaint)
+    }
+
+    private data class CushionRayHit(
+        val hitPoint: Vector2D,
+        val wallIndex: Int,
+        val normal: Vector2D,
+        val dist: Float
+    )
+
+    private fun raycastCushion(start: Vector2D, dir: Vector2D): CushionRayHit? {
+        val r = ballRadius
+        val minX = tableBounds.left + r
+        val maxX = tableBounds.right - r
+        val minY = tableBounds.top + r
+        val maxY = tableBounds.bottom - r
+
+        var bestT = Float.MAX_VALUE
+        var bestHit: CushionRayHit? = null
+
+        // Top Wall (y = minY, normal (0, 1))
+        if (dir.y < -0.0001f) {
+            val t = (minY - start.y) / dir.y
+            if (t > 0.01f && t < bestT) {
+                val hx = start.x + t * dir.x
+                if (hx in minX..maxX) {
+                    bestT = t
+                    bestHit = CushionRayHit(Vector2D(hx, minY), 1, Vector2D(0f, 1f), t)
+                }
+            }
+        }
+        // Bottom Wall (y = maxY, normal (0, -1))
+        if (dir.y > 0.0001f) {
+            val t = (maxY - start.y) / dir.y
+            if (t > 0.01f && t < bestT) {
+                val hx = start.x + t * dir.x
+                if (hx in minX..maxX) {
+                    bestT = t
+                    bestHit = CushionRayHit(Vector2D(hx, maxY), 2, Vector2D(0f, -1f), t)
+                }
+            }
+        }
+        // Left Wall (x = minX, normal (1, 0))
+        if (dir.x < -0.0001f) {
+            val t = (minX - start.x) / dir.x
+            if (t > 0.01f && t < bestT) {
+                val hy = start.y + t * dir.y
+                if (hy in minY..maxY) {
+                    bestT = t
+                    bestHit = CushionRayHit(Vector2D(minX, hy), 3, Vector2D(1f, 0f), t)
+                }
+            }
+        }
+        // Right Wall (x = maxX, normal (-1, 0))
+        if (dir.x > 0.0001f) {
+            val t = (maxX - start.x) / dir.x
+            if (t > 0.01f && t < bestT) {
+                val hy = start.y + t * dir.y
+                if (hy in minY..maxY) {
+                    bestT = t
+                    bestHit = CushionRayHit(Vector2D(maxX, hy), 4, Vector2D(-1f, 0f), t)
+                }
+            }
+        }
+        return bestHit
+    }
+
+    private data class BallRayHit(
+        val ballCenter: Vector2D,
+        val ghostCenter: Vector2D,
+        val dist: Float
+    )
+
+    private fun raycastBalls(start: Vector2D, dir: Vector2D, ignoreBall: Vector2D? = null): BallRayHit? {
+        val twoR = ballRadius * 2.0f
+        val twoRSq = twoR * twoR
+        var bestDist = Float.MAX_VALUE
+        var bestHit: BallRayHit? = null
+
+        for (b in allDetectedBalls) {
+            if (ignoreBall != null && (b.x - ignoreBall.x) * (b.x - ignoreBall.x) + (b.y - ignoreBall.y) * (b.y - ignoreBall.y) < 25f) {
+                continue
+            }
+            val wx = b.x - start.x
+            val wy = b.y - start.y
+            val dStartSq = wx * wx + wy * wy
+            if (dStartSq < 100f) continue // Skip origin ball
+
+            val proj = wx * dir.x + wy * dir.y
+            if (proj > 1.0f) {
+                val perpSq = dStartSq - proj * proj
+                if (perpSq <= twoRSq && perpSq >= 0f) {
+                    val halfChord = sqrt(maxOf(0f, twoRSq - perpSq))
+                    val dHit = proj - halfChord
+                    if (dHit > 0.5f && dHit < bestDist) {
+                        bestDist = dHit
+                        val gx = start.x + dHit * dir.x
+                        val gy = start.y + dHit * dir.y
+                        bestHit = BallRayHit(b, Vector2D(gx, gy), dHit)
+                    }
+                }
+            }
+        }
+        return bestHit
+    }
+
+    private fun computeCushionRebound(incidentDir: Vector2D, normal: Vector2D, powerPercent: Float, forceLevel: Int): Pair<Vector2D, Vector2D> {
+        // Specular Geometric Reflection (White Line)
+        val dot = incidentDir.x * normal.x + incidentDir.y * normal.y
+        val specX = incidentDir.x - 2f * dot * normal.x
+        val specY = incidentDir.y - 2f * dot * normal.y
+        val whiteDir = Vector2D(specX, specY).normalized()
+
+        // Power-Adjusted Reflection (Yellow Line)
+        val effPower = powerPercent.coerceIn(0.0f, 1.0f) * (forceLevel / 11.0f)
+        val cosIncidence = abs(dot).coerceIn(0f, 1f)
+        val sinIncidence = sqrt(maxOf(0f, 1f - cosIncidence * cosIncidence))
+
+        // Angle narrows by deltaRad:
+        val deltaRad = 0.12f * effPower * (2f * sinIncidence * cosIncidence)
+        val cross = whiteDir.x * normal.y - whiteDir.y * normal.x
+        val rotSign = if (cross > 0) -1f else 1f
+        val cosD = cos((rotSign * deltaRad).toDouble()).toFloat()
+        val sinD = sin((rotSign * deltaRad).toDouble()).toFloat()
+
+        val yellowX = whiteDir.x * cosD - whiteDir.y * sinD
+        val yellowY = whiteDir.x * sinD + whiteDir.y * cosD
+        val yellowDir = Vector2D(yellowX, yellowY).normalized()
+
+        return Pair(whiteDir, yellowDir)
+    }
+
+    private fun drawAngleBracket(canvas: Canvas, origin: Vector2D, dirTarget: Vector2D, dirDeflect: Vector2D) {
+        val armLen = ballRadius * 0.70f
+        val p1X = origin.x + dirTarget.x * armLen
+        val p1Y = origin.y + dirTarget.y * armLen
+        val p2X = origin.x + (dirTarget.x + dirDeflect.x) * armLen
+        val p2Y = origin.y + (dirTarget.y + dirDeflect.y) * armLen
+        val p3X = origin.x + dirDeflect.x * armLen
+        val p3Y = origin.y + dirDeflect.y * armLen
+
+        canvas.drawLine(origin.x, origin.y, p1X, p1Y, angleSplitBracketPaint)
+        canvas.drawLine(p1X, p1Y, p2X, p2Y, angleSplitBracketPaint)
+        canvas.drawLine(p2X, p2Y, p3X, p3Y, angleSplitBracketPaint)
+        canvas.drawLine(origin.x, origin.y, p3X, p3Y, angleSplitBracketPaint)
     }
 }
