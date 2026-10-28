@@ -601,6 +601,7 @@ class AimOverlayService : Service(), SensorEventListener {
             }
 
             // Cue Force Controls (Aiming Master Style)
+            val appSettings = AppSettings.get(this)
             val tvCueForceVal = modMenuView?.findViewById<TextView>(R.id.tvCueForceVal)
             val seekCueForce = modMenuView?.findViewById<SeekBar>(R.id.seekCueForce)
             val btnCueForceMinus = modMenuView?.findViewById<View>(R.id.btnCueForceMinus)
@@ -611,11 +612,11 @@ class AimOverlayService : Service(), SensorEventListener {
                 tvCueForceVal?.text = "Force $clamped"
                 seekCueForce?.progress = clamped
                 canvasView?.cueForceLevel = clamped
-                settings.cueForceLevel = clamped
+                appSettings.cueForceLevel = clamped
                 canvasView?.postInvalidate()
             }
 
-            val savedForce = settings.cueForceLevel
+            val savedForce = appSettings.cueForceLevel
             updateCueForceDisplay(savedForce)
 
             seekCueForce?.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
