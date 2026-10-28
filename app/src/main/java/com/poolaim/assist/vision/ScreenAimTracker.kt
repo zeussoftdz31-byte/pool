@@ -43,7 +43,10 @@ class ScreenAimTracker(
             aimAngleRad: Float,
             powerPercent: Float,
             targetBallPos: Vector2D?,
-            matchDetected: Boolean,
+            allBalls: List<Vector2D> = emptyList(),
+            spinX: Float = 0f,
+            spinY: Float = 0f,
+            matchDetected: Boolean = true,
             tableBounds: RectF? = null,
             isAiming: Boolean = true
         )
@@ -440,12 +443,19 @@ class ScreenAimTracker(
         // 1. Cue Stick Detection: Checks 16 directions around ball for the cue stick shaft.
         // Screen buffer boundary check (2 until width - 2) ensures the cue stick is DETECTED
         // EVEN WHEN OVER THE CUSHION/RAIL!
+        // Flank verification guarantees that an adjacent ball or cluster is NEVER mistaken for a cue stick!
         fun checkCueStickNear(cx: Float, cy: Float): Boolean {
+            val flankDist = ballRadiusEst * 0.75f
             for (d in 0 until 16) {
                 val theta = (d * 2.0 * Math.PI / 16).toFloat()
                 val cosT = cos(theta.toDouble()).toFloat()
                 val sinT = sin(theta.toDouble()).toFloat()
+                val orthCos = -sinT
+                val orthSin = cosT
+
                 var stickPixels = 0
+                var flankFeltPixels = 0
+
                 for (s in 2..7) {
                     val dist = ballRadiusEst * (1.3f + s * 0.9f)
                     val bx = (cx - dist * cosT).toInt()
@@ -457,20 +467,63 @@ class ScreenAimTracker(
                         val b = c and 0xFF
                         if (!isFelt(r, g, b)) {
                             stickPixels++
+
+                            val lx = (bx + flankDist * orthCos).toInt()
+                            val ly = (by + flankDist * orthSin).toInt()
+                            val rx = (bx - flankDist * orthCos).toInt()
+                            val ry = (by - flankDist * orthSin).toInt()
+
+                            if (lx in 0 until width && ly in 0 until height) {
+                                val cl = getPixelPacked(buffer, lx, ly, rowStride, pixelStride, width, height)
+                                if (isFelt((cl shr 16) and 0xFF, (cl shr 8) and 0xFF, cl and 0xFF)) {
+                                    flankFeltPixels++
+                                }
+                            }
+                            if (rx in 0 until width && ry in 0 until height) {
+                                val cr = getPixelPacked(buffer, rx, ry, rowStride, pixelStride, width, height)
+                                if (isFelt((cr shr 16) and 0xFF, (cr shr 8) and 0xFF, cr and 0xFF)) {
+                                    flankFeltPixels++
+                                }
+                            }
                         }
                     }
                 }
-                if (stickPixels >= 3) return true
+                // A TRUE CUE STICK is a narrow shaft with GREEN FELT on its flanks!
+                // An adjacent ball or cluster is wide in all directions, so its flanks are NOT felt!
+                if (stickPixels >= 3 && flankFeltPixels >= 2) return true
             }
             return false
         }
 
-        // 2. Candidate Evaluation: Evaluates whiteness purity and cue stick presence.
+        // 2. Guideline Emerging Detection:
+        // The game's native white guideline ONLY emerges directly from the true cue ball!
+        fun hasGuidelineEmerging(cx: Float, cy: Float): Boolean {
+            val r1 = ballRadiusEst * 1.25f
+            val r2 = ballRadiusEst * 3.5f
+            for (d in 0 until 16) {
+                val theta = (d * 2.0 * Math.PI / 16).toFloat()
+                val cosT = cos(theta.toDouble()).toFloat()
+                val sinT = sin(theta.toDouble()).toFloat()
+                var whiteDots = 0
+                var rDist = r1
+                while (rDist <= r2) {
+                    val px = (cx + rDist * cosT).toInt()
+                    val py = (cy + rDist * sinT).toInt()
+                    if (px in 0 until width && py in 0 until height && isWhiteLinePixel(px, py)) {
+                        whiteDots++
+                    }
+                    rDist += maxOf(2.0f, ballRadiusEst * 0.35f)
+                }
+                if (whiteDots >= 2) return true
+            }
+            return false
+        }
+
+        // 3. Candidate Evaluation: Evaluates whiteness purity, cue stick presence, and guideline emergence.
         // Full cushion support: NEVER rejects balls touching the cushion!
         fun scoreCandidateCueBall(cx: Float, cy: Float): Float {
             val icx = cx.toInt()
             val icy = cy.toInt()
-            // Allow ball centers to be anywhere on the playable table, right against cushions
             if (icx < tableStartX - 4 || icx > tableEndX + 4 ||
                 icy < tableStartY - 4 || icy > tableEndY + 4
             ) {
@@ -504,16 +557,11 @@ class ScreenAimTracker(
                 }
             }
 
-            // Must have sufficient white mass to be a real ball (rejects tiny specular glares).
-            // A ball touching the cushion has at least 8 sample points.
             if (whiteCount < 8) return -1f
 
             val total = (whiteCount + coloredCount).toFloat()
             val purity = (whiteCount.toFloat() / (total + 0.001f)).coerceIn(0f, 1f)
 
-            // Whiteness purity squared heavily penalizes striped balls 9-15:
-            // Cue ball (purity ~0.90) -> factor 0.81
-            // Striped ball (purity ~0.45) -> factor 0.20 (4x lower!)
             var score = whiteWeight * (purity * purity)
 
             if (purity < 0.60f) {
@@ -522,7 +570,12 @@ class ScreenAimTracker(
 
             // Cue stick bonus: In 8 Ball Pool, the cue stick is ONLY positioned behind the true cue ball!
             if (checkCueStickNear(cx, cy)) {
-                score += 15000f
+                score += 18000f
+            }
+
+            // Guideline bonus: Guideline dots ONLY emerge from the true cue ball!
+            if (hasGuidelineEmerging(cx, cy)) {
+                score += 25000f
             }
 
             return score
@@ -1024,7 +1077,61 @@ class ScreenAimTracker(
         smoothPower += (powerTarget - smoothPower) * 0.25f
 
         // =========================================================================
-        // STEP 7: MAP TO PHYSICAL SCREEN RESOLUTION
+        // STEP 7: IN-GAME SPIN (ENGLISH) WIDGET DETECTOR
+        // =========================================================================
+        var detectedSpinX = 0f
+        var detectedSpinY = 0f
+
+        val spinMinX = (width * 0.80f).toInt()
+        val spinMaxX = (width * 0.98f).toInt()
+        val spinMinY = (height * 0.02f).toInt()
+        val spinMaxY = (height * 0.22f).toInt()
+
+        var redSumX = 0f
+        var redSumY = 0f
+        var redCount = 0
+        var whiteCenterSumX = 0f
+        var whiteCenterSumY = 0f
+        var whiteCount = 0
+
+        for (sy in spinMinY..spinMaxY step 2) {
+            for (sx in spinMinX..spinMaxX step 2) {
+                val sc = getPixelPacked(buffer, sx, sy, rowStride, pixelStride, width, height)
+                val sr = (sc shr 16) and 0xFF
+                val sg = (sc shr 8) and 0xFF
+                val sb = sc and 0xFF
+
+                if (sr > 170 && sg < 75 && sb < 75 && (sr - sg) > 85) {
+                    redSumX += sx
+                    redSumY += sy
+                    redCount++
+                } else if (sr > 210 && sg > 210 && sb > 210) {
+                    whiteCenterSumX += sx
+                    whiteCenterSumY += sy
+                    whiteCount++
+                }
+            }
+        }
+
+        if (redCount >= 2 && whiteCount >= 25) {
+            val redAvgX = redSumX / redCount
+            val redAvgY = redSumY / redCount
+            val whiteAvgX = whiteCenterSumX / whiteCount
+            val whiteAvgY = whiteCenterSumY / whiteCount
+            val iconRadius = sqrt(whiteCount.toDouble() * 4.0 / Math.PI).toFloat() * 0.5f
+
+            if (iconRadius > 6f) {
+                val offX = (redAvgX - whiteAvgX) / (iconRadius * 0.85f)
+                val offY = (redAvgY - whiteAvgY) / (iconRadius * 0.85f)
+                if (hypot(offX, offY) > 0.10f) {
+                    detectedSpinX = offX.coerceIn(-1.0f, 1.0f)
+                    detectedSpinY = offY.coerceIn(-1.0f, 1.0f)
+                }
+            }
+        }
+
+        // =========================================================================
+        // STEP 8: MAP TO PHYSICAL SCREEN RESOLUTION & DELIVER COMPLETE DATA
         // =========================================================================
         val scaleX = screenWidth.toFloat() / width
         val scaleY = screenHeight.toFloat() / height
@@ -1035,6 +1142,11 @@ class ScreenAimTracker(
             Vector2D(targetBallX * scaleX, targetBallY * scaleY)
         } else {
             null
+        }
+
+        val allRealBalls = ArrayList<Vector2D>(detectedBalls.size)
+        for (b in detectedBalls) {
+            allRealBalls.add(Vector2D(b.x * scaleX, b.y * scaleY))
         }
 
         val detectedBounds = if (isCalibrated && userCalibratedBounds != null) {
@@ -1053,6 +1165,9 @@ class ScreenAimTracker(
             aimAngleRad = smoothAngle,
             powerPercent = smoothPower,
             targetBallPos = realTargetPos,
+            allBalls = allRealBalls,
+            spinX = detectedSpinX,
+            spinY = detectedSpinY,
             matchDetected = true,
             tableBounds = detectedBounds,
             isAiming = isAimingActive

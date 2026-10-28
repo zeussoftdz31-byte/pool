@@ -688,6 +688,56 @@
                                 android:layout_centerVertical="true" />
                         </RelativeLayout>
 
+                        <!-- Row 4: Combo / Carom Shots -->
+                        <RelativeLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginBottom="2dp">
+
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="🎱 تصادم الكرات المركب (Combo / Carom)"
+                                android:textColor="#FF9100"
+                                android:textSize="11sp"
+                                android:textStyle="bold"
+                                android:layout_alignParentStart="true"
+                                android:layout_centerVertical="true" />
+
+                            <androidx.appcompat.widget.SwitchCompat
+                                android:id="@+id/switchComboPhysics"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:checked="true"
+                                android:layout_alignParentEnd="true"
+                                android:layout_centerVertical="true" />
+                        </RelativeLayout>
+
+                        <!-- Row 5: Spin / English Physics -->
+                        <RelativeLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginBottom="2dp">
+
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="🌀 فيزياء الدوران والـ Spin (English)"
+                                android:textColor="#00E5FF"
+                                android:textSize="11sp"
+                                android:textStyle="bold"
+                                android:layout_alignParentStart="true"
+                                android:layout_centerVertical="true" />
+
+                            <androidx.appcompat.widget.SwitchCompat
+                                android:id="@+id/switchSpinPhysics"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:checked="true"
+                                android:layout_alignParentEnd="true"
+                                android:layout_centerVertical="true" />
+                        </RelativeLayout>
+
                         <!-- Row 4: Aim Max Power (Text + Slider) -->
                         <LinearLayout
                             android:layout_width="match_parent"

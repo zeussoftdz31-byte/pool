@@ -38,6 +38,13 @@ class AimCanvasView(context: Context) : View(context) {
     var shotPowerPercent = 0.85f
     var targetBallPos: Vector2D? = null
 
+    // Multi-Ball Collision & Spin State
+    var allDetectedBalls: List<Vector2D> = emptyList()
+    var currentSpinX: Float = 0f // English / Side-spin (-1.0 to 1.0)
+    var currentSpinY: Float = 0f // Vertical spin (-1.0: Top/Follow, 1.0: Back/Draw)
+    var enableComboShots = true
+    var enableSpinPhysics = true
+
     // Mod Menu Configurable Flags
     var isMasterOverlayEnabled = true
     var isCalibrationModeActive = false
@@ -131,6 +138,42 @@ class AimCanvasView(context: Context) : View(context) {
         color = ContextCompat.getColor(context, R.color.laser_red)
         style = Paint.Style.STROKE
         strokeWidth = 7f
+    }
+
+    private val comboTrajectoryPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = Color.parseColor("#FF9100") // Vivid Neon Amber / Gold
+        strokeWidth = 4.5f
+        style = Paint.Style.STROKE
+        strokeCap = Paint.Cap.ROUND
+        pathEffect = DashPathEffect(floatArrayOf(12f, 10f), 0f)
+    }
+
+    private val comboGhostBallPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = Color.parseColor("#FF9100")
+        strokeWidth = 3f
+        style = Paint.Style.STROKE
+    }
+
+    private val comboStopMarkerPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = Color.parseColor("#FF9100")
+        strokeWidth = 4f
+        style = Paint.Style.STROKE
+    }
+
+    private val spinWidgetBallPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = Color.parseColor("#EEFFFFFF")
+        style = Paint.Style.FILL
+    }
+
+    private val spinWidgetBorderPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = Color.parseColor("#38BDF8")
+        strokeWidth = 2.5f
+        style = Paint.Style.STROKE
+    }
+
+    private val spinWidgetDotPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = Color.parseColor("#FF1744")
+        style = Paint.Style.FILL
     }
 
     private val pocketMarkerPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
@@ -429,6 +472,9 @@ class AimCanvasView(context: Context) : View(context) {
         angleRad: Float,
         power: Float,
         target: Vector2D?,
+        allBalls: List<Vector2D> = emptyList(),
+        spinX: Float = 0f,
+        spinY: Float = 0f,
         matchActive: Boolean = true,
         detectedBounds: RectF? = null,
         isAiming: Boolean = true
@@ -436,6 +482,12 @@ class AimCanvasView(context: Context) : View(context) {
         isMatchDetected = matchActive
         isAimingActive = isAiming
         if (!isMasterOverlayEnabled) return
+
+        allDetectedBalls = allBalls
+        if (enableSpinPhysics) {
+            currentSpinX = spinX
+            currentSpinY = spinY
+        }
 
         if (!isUserCalibrationSaved && detectedBounds != null && detectedBounds.width() > 100f && detectedBounds.height() > 80f) {
             tableBounds.set(
@@ -656,7 +708,13 @@ class AimCanvasView(context: Context) : View(context) {
 
             val maxBounces = if (enableBankShots) 4 else 0
 
-            // 1. Trace & Render Target Ball Trajectory
+            val otherBallsForTarget = if (enableComboShots) {
+                allDetectedBalls.filter { hypot(it.x - target.x, it.y - target.y) > ballRadius * 1.5f }
+            } else {
+                emptyList()
+            }
+
+            // 1. Trace & Render Target Ball Trajectory (With Multi-Ball Collision & Side Spin)
             val targetTrajectory = LineIntersection.traceBallPath(
                 startX = target.x,
                 startY = target.y,
@@ -669,7 +727,9 @@ class AimCanvasView(context: Context) : View(context) {
                 tableBottom = tableBounds.bottom,
                 ballRadius = ballRadius,
                 pockets = pockets,
-                pocketScale = pocketScale
+                pocketScale = pocketScale,
+                otherBalls = otherBallsForTarget,
+                sideSpin = currentSpinX
             )
 
             // Render Target Ball Segments
@@ -680,6 +740,26 @@ class AimCanvasView(context: Context) : View(context) {
                     else -> secondBankPaint
                 }
                 canvas.drawLine(seg.startX, seg.startY, seg.endX, seg.endY, paint)
+            }
+
+            // Render Combo Collision (إذا اصطدمت الكرة الهدف بكرة ثانية على الطاولة)
+            targetTrajectory.comboCollision?.let { combo ->
+                // Draw second ghost ball at secondary collision
+                canvas.drawCircle(combo.ghostBallPos.x, combo.ghostBallPos.y, ballRadius, comboGhostBallPaint)
+
+                // Draw secondary ball trajectory towards pocket or cushion
+                for (seg in combo.secondBallTrajectory.segments) {
+                    canvas.drawLine(seg.startX, seg.startY, seg.endX, seg.endY, comboTrajectoryPaint)
+                }
+
+                // Render secondary ball stopping circle or pocket pot
+                if (!combo.secondBallTrajectory.pottedInPocket) {
+                    canvas.drawCircle(combo.secondBallTrajectory.stopX, combo.secondBallTrajectory.stopY, ballRadius, comboStopMarkerPaint)
+                    canvas.drawCircle(combo.secondBallTrajectory.stopX, combo.secondBallTrajectory.stopY, 4f, comboStopMarkerPaint)
+                } else if (enablePocketGlow) {
+                    val p = pockets[combo.secondBallTrajectory.pocketIndex]
+                    canvas.drawCircle(p.x, p.y, ballRadius * 1.7f * pocketScale, comboStopMarkerPaint)
+                }
             }
 
             // Render Target Ball Stop Circle (موقع توقف كرة الهدف)
@@ -698,16 +778,31 @@ class AimCanvasView(context: Context) : View(context) {
                 canvas.drawCircle(p.x, p.y, ballRadius * 2.3f * pocketScale, pocketGlowPaint)
             }
 
-            // 2. Trace & Render Cue Ball Tangent Deflection (مسار الكرة البيضاء ومكان توقفها)
+            // 2. Trace & Render Cue Ball Tangent Deflection with Vertical Spin (Top Spin / Back Spin)
             if (enableCueBallPath && cueDeflectionDistance > 10f) {
-                // Tangent vector is perpendicular to impact vector
                 val perpX = -exitDy / exitLen
                 val perpY = exitDx / exitLen
 
                 val dot = dirX * perpX + dirY * perpY
                 val sign = if (dot >= 0) 1f else -1f
-                val tanDx = perpX * sign
-                val tanDy = perpY * sign
+                var tanDx = perpX * sign
+                var tanDy = perpY * sign
+
+                // Apply Spin physics to cue ball post-impact deflection:
+                // currentSpinY: -1.0 (Top Spin / Follow), +1.0 (Back Spin / Draw)
+                if (enableSpinPhysics) {
+                    if (currentSpinY < -0.05f) {
+                        // Top Spin / Follow: pushes forward along (dirX, dirY)
+                        val followFactor = (-currentSpinY) * 0.75f
+                        tanDx = tanDx * (1f - followFactor * 0.4f) + dirX * followFactor
+                        tanDy = tanDy * (1f - followFactor * 0.4f) + dirY * followFactor
+                    } else if (currentSpinY > 0.05f) {
+                        // Back Spin / Draw: draws back against (dirX, dirY)
+                        val drawFactor = currentSpinY * 0.85f
+                        tanDx = tanDx * (1f - drawFactor * 0.5f) - dirX * drawFactor
+                        tanDy = tanDy * (1f - drawFactor * 0.5f) - dirY * drawFactor
+                    }
+                }
 
                 var tanAngleDeg = Math.toDegrees(atan2(-tanDy.toDouble(), tanDx.toDouble())).toFloat()
                 if (tanAngleDeg < 0f) tanAngleDeg += 360f
@@ -724,7 +819,9 @@ class AimCanvasView(context: Context) : View(context) {
                     tableBottom = tableBounds.bottom,
                     ballRadius = ballRadius,
                     pockets = pockets,
-                    pocketScale = pocketScale
+                    pocketScale = pocketScale,
+                    otherBalls = emptyList(),
+                    sideSpin = currentSpinX
                 )
 
                 for (seg in cueTrajectory.segments) {
@@ -775,7 +872,9 @@ class AimCanvasView(context: Context) : View(context) {
                 tableBottom = tableBounds.bottom,
                 ballRadius = ballRadius,
                 pockets = pockets,
-                pocketScale = pocketScale
+                pocketScale = pocketScale,
+                otherBalls = if (enableComboShots) allDetectedBalls else emptyList(),
+                sideSpin = currentSpinX
             )
 
             for ((idx, seg) in cueDirectTrajectory.segments.withIndex()) {
@@ -797,6 +896,21 @@ class AimCanvasView(context: Context) : View(context) {
                 canvas.drawCircle(p.x, p.y, ballRadius * 1.6f * pocketScale, pocketGlowPaint)
                 canvas.drawCircle(p.x, p.y, ballRadius * 2.3f * pocketScale, pocketGlowPaint)
             }
+        }
+
+        // 3. Draw In-Game Active Spin HUD Widget (دائرة الـ Spin الحالية مع موضع النقطة الحمراء)
+        if (enableSpinPhysics && (abs(currentSpinX) > 0.05f || abs(currentSpinY) > 0.05f)) {
+            val spinCenterR = ballRadius * 0.95f
+            val spinHUDX = tableBounds.right - spinCenterR - 12f
+            val spinHUDY = tableBounds.top + spinCenterR + 12f
+
+            canvas.drawCircle(spinHUDX, spinHUDY, spinCenterR, spinWidgetBallPaint)
+            canvas.drawCircle(spinHUDX, spinHUDY, spinCenterR, spinWidgetBorderPaint)
+
+            // Red dot indicating strike point
+            val dotX = spinHUDX + currentSpinX * (spinCenterR * 0.65f)
+            val dotY = spinHUDY + currentSpinY * (spinCenterR * 0.65f)
+            canvas.drawCircle(dotX, dotY, 4.5f, spinWidgetDotPaint)
         }
 
         // Draw Cue Ball Origin Marker (الكرة البيضاء هي الأساس الثابت وقاعدة انطلاق الخطوط)

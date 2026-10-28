@@ -14,6 +14,15 @@ data class TrajectorySegment(
 )
 
 /**
+ * Secondary ball collision (Carom / Combination shot) data.
+ */
+data class ComboCollision(
+    val secondBallPos: Vector2D,
+    val ghostBallPos: Vector2D,
+    val secondBallTrajectory: BallTrajectory
+)
+
+/**
  * Complete simulated trajectory of a ball until it stops completely due to friction
  * or falls into a pocket.
  */
@@ -22,7 +31,8 @@ data class BallTrajectory(
     val stopX: Float,
     val stopY: Float,
     val pottedInPocket: Boolean,
-    val pocketIndex: Int = -1
+    val pocketIndex: Int = -1,
+    val comboCollision: ComboCollision? = null
 )
 
 /**
@@ -128,13 +138,23 @@ class LineIntersection(
         }
 
         /**
-         * Calculates reflected angle after hitting a cushion wall.
+         * Calculates reflected angle after hitting a cushion wall, modified by side spin (English).
          */
-        fun getReflectedAngle(incidentAngleDeg: Float, wall: Int): Float {
+        fun getReflectedAngle(incidentAngleDeg: Float, wall: Int, sideSpin: Float = 0f): Float {
             var reflected = incidentAngleDeg
             when (wall) {
                 WALL_TOP, WALL_BOTTOM -> reflected = 360f - incidentAngleDeg
                 WALL_LEFT, WALL_RIGHT -> reflected = 180f - incidentAngleDeg
+            }
+            if (sideSpin != 0f) {
+                val spinEffect = when (wall) {
+                    WALL_TOP -> -sideSpin * 16f
+                    WALL_BOTTOM -> sideSpin * 16f
+                    WALL_LEFT -> -sideSpin * 16f
+                    WALL_RIGHT -> sideSpin * 16f
+                    else -> 0f
+                }
+                reflected += spinEffect
             }
             while (reflected < 0f) reflected += 360f
             while (reflected >= 360f) reflected -= 360f
@@ -142,15 +162,8 @@ class LineIntersection(
         }
 
         /**
-         * Traces the complete path of a ball until it stops completely due to friction
-         * or drops into one of the 6 pockets, simulating exact Wizard Pool 8 mechanics.
-         *
-         * @param startX Starting X coordinate
-         * @param startY Starting Y coordinate
-         * @param angleDeg Direction in degrees
-         * @param totalDistance Total distance the ball can roll based on strike power
-         * @param maxBounces Maximum cushion reflections to trace (e.g. 2 or 3)
-         * @param pockets List of 6 pocket coordinates
+         * Traces the complete path of a ball until it stops completely due to friction,
+         * drops into one of the 6 pockets, or collides with another ball (Combo / Carom shot).
          */
         fun traceBallPath(
             startX: Float,
@@ -164,25 +177,30 @@ class LineIntersection(
             tableBottom: Float,
             ballRadius: Float,
             pockets: List<Vector2D>,
-            pocketScale: Float = 1.0f
+            pocketScale: Float = 1.0f,
+            otherBalls: List<Vector2D> = emptyList(),
+            sideSpin: Float = 0f,
+            depth: Int = 0
         ): BallTrajectory {
             val segments = mutableListOf<TrajectorySegment>()
             var currX = startX
             var currY = startY
             var currAngle = angleDeg
             var remainingDist = totalDistance
-            // Realistic pocket jaw opening threshold (1.15x ball radius)
             val pocketThreshold = ballRadius * 1.15f * pocketScale
 
             var stopX = startX
             var stopY = startY
             var isPotted = false
             var potIndex = -1
+            var comboHit: ComboCollision? = null
+
+            val twoR = ballRadius * 2.0f
+            val twoRSq = twoR * twoR
 
             for (bounce in 0..maxBounces) {
                 if (remainingDist <= 4f) break
 
-                // Find ray intersection with cushion
                 val hit = getLineIntersectionPoint(
                     currX, currY, currAngle,
                     tableLeft, tableTop, tableRight, tableBottom,
@@ -190,14 +208,16 @@ class LineIntersection(
                 )
 
                 val distToCushion = hypot(hit.endX - currX, hit.endY - currY)
+                val rad = Math.toRadians(currAngle.toDouble())
+                val dx = cos(rad).toFloat()
+                val dy = (-sin(rad)).toFloat()
 
-                // Check if segment crosses into any pocket
+                // Check for Pocket Intersection
                 var hitPocket = false
                 var distToPocket = Float.MAX_VALUE
                 var closestPocketIdx = -1
 
                 for ((idx, p) in pockets.withIndex()) {
-                    // Check projection of pocket on segment
                     val segDx = hit.endX - currX
                     val segDy = hit.endY - currY
                     val segLenSq = segDx * segDx + segDy * segDy
@@ -218,7 +238,74 @@ class LineIntersection(
                     }
                 }
 
-                if (hitPocket) {
+                // Check for Ball-to-Ball Collision (Multi-Ball Carom / Combo)
+                var hitOtherBall: Vector2D? = null
+                var minBallHitDist = Float.MAX_VALUE
+
+                if (otherBalls.isNotEmpty() && depth == 0) {
+                    for (ob in otherBalls) {
+                        // Skip if it's the start point itself
+                        val deltaX = ob.x - currX
+                        val deltaY = ob.y - currY
+                        val proj = deltaX * dx + deltaY * dy
+
+                        if (proj > ballRadius * 0.5f && proj < distToCushion && proj < distToPocket && proj < remainingDist) {
+                            val distSq = deltaX * deltaX + deltaY * deltaY
+                            val perpSq = max(0f, distSq - proj * proj)
+
+                            if (perpSq <= twoRSq) {
+                                val hitDist = max(0f, proj - sqrt(twoRSq - perpSq))
+                                if (hitDist in 0.1f..minBallHitDist) {
+                                    minBallHitDist = hitDist
+                                    hitOtherBall = ob
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Decision hierarchy: Pocket vs Ball vs Cushion vs Distance Expiry
+                if (hitOtherBall != null && minBallHitDist < distToPocket && minBallHitDist < distToCushion) {
+                    // Ball hits another object ball! (Combo Shot)
+                    val ghostX = currX + dx * minBallHitDist
+                    val ghostY = currY + dy * minBallHitDist
+
+                    segments.add(TrajectorySegment(currX, currY, ghostX, ghostY, WALL_NONE))
+                    stopX = ghostX
+                    stopY = ghostY
+
+                    val exitDx = hitOtherBall.x - ghostX
+                    val exitDy = hitOtherBall.y - ghostY
+                    val exitLen = max(0.001f, hypot(exitDx, exitDy))
+                    var secondBallAngle = Math.toDegrees(atan2(-exitDy.toDouble(), exitDx.toDouble())).toFloat()
+                    if (secondBallAngle < 0f) secondBallAngle += 360f
+
+                    val cosCut = ((dx * exitDx + dy * exitDy) / exitLen).coerceIn(0f, 1f)
+                    val remainingEnergy = max(0f, remainingDist - minBallHitDist)
+                    val secondBallEnergy = remainingEnergy * (cosCut * cosCut)
+
+                    // Trace second ball path
+                    val secondBallTrajectory = traceBallPath(
+                        startX = hitOtherBall.x,
+                        startY = hitOtherBall.y,
+                        angleDeg = secondBallAngle,
+                        totalDistance = secondBallEnergy,
+                        maxBounces = 2,
+                        tableLeft = tableLeft,
+                        tableTop = tableTop,
+                        tableRight = tableRight,
+                        tableBottom = tableBottom,
+                        ballRadius = ballRadius,
+                        pockets = pockets,
+                        pocketScale = pocketScale,
+                        otherBalls = emptyList(),
+                        sideSpin = 0f,
+                        depth = 1
+                    )
+
+                    comboHit = ComboCollision(hitOtherBall, Vector2D(ghostX, ghostY), secondBallTrajectory)
+                    break
+                } else if (hitPocket) {
                     val p = pockets[closestPocketIdx]
                     segments.add(TrajectorySegment(currX, currY, p.x, p.y, WALL_NONE))
                     stopX = p.x
@@ -226,13 +313,7 @@ class LineIntersection(
                     isPotted = true
                     potIndex = closestPocketIdx
                     break
-                }
-
-                // If ball doesn't reach the cushion with remaining energy
-                if (distToCushion > remainingDist) {
-                    val rad = Math.toRadians(currAngle.toDouble())
-                    val dx = cos(rad).toFloat()
-                    val dy = (-sin(rad)).toFloat()
+                } else if (distToCushion > remainingDist) {
                     val finalX = currX + remainingDist * dx
                     val finalY = currY + remainingDist * dy
 
@@ -241,7 +322,6 @@ class LineIntersection(
                     stopY = finalY
                     break
                 } else {
-                    // Ball reaches the cushion and bounces
                     segments.add(TrajectorySegment(currX, currY, hit.endX, hit.endY, hit.wallHit))
                     stopX = hit.endX
                     stopY = hit.endY
@@ -250,13 +330,12 @@ class LineIntersection(
 
                     currX = hit.endX
                     currY = hit.endY
-                    currAngle = getReflectedAngle(currAngle, hit.wallHit)
-                    // Deduct distance and apply cushion restitution energy loss (approx 20% loss)
-                    remainingDist = (remainingDist - distToCushion) * 0.80f
+                    currAngle = getReflectedAngle(currAngle, hit.wallHit, sideSpin)
+                    remainingDist = (remainingDist - distToCushion) * 0.82f
                 }
             }
 
-            return BallTrajectory(segments, stopX, stopY, isPotted, potIndex)
+            return BallTrajectory(segments, stopX, stopY, isPotted, potIndex, comboHit)
         }
     }
 }

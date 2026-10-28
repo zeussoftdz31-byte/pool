@@ -587,6 +587,19 @@ class AimOverlayService : Service(), SensorEventListener {
                 canvasView?.postInvalidate()
             }
 
+            val switchComboPhysics = modMenuView?.findViewById<androidx.appcompat.widget.SwitchCompat>(R.id.switchComboPhysics)
+            val switchSpinPhysics = modMenuView?.findViewById<androidx.appcompat.widget.SwitchCompat>(R.id.switchSpinPhysics)
+
+            switchComboPhysics?.setOnCheckedChangeListener { _, isChecked ->
+                canvasView?.enableComboShots = isChecked
+                canvasView?.postInvalidate()
+            }
+
+            switchSpinPhysics?.setOnCheckedChangeListener { _, isChecked ->
+                canvasView?.enableSpinPhysics = isChecked
+                canvasView?.postInvalidate()
+            }
+
             val initialPower = canvasView?.shotPowerPercent ?: 0.85f
             seekAimPower?.progress = (initialPower * 100).toInt()
             tvAimPowerVal?.text = String.format("%.2f", initialPower)
@@ -824,11 +837,25 @@ class AimOverlayService : Service(), SensorEventListener {
                             aimAngleRad: Float,
                             powerPercent: Float,
                             targetBallPos: Vector2D?,
+                            allBalls: List<Vector2D>,
+                            spinX: Float,
+                            spinY: Float,
                             matchDetected: Boolean,
                             tableBounds: RectF?,
                             isAiming: Boolean
                         ) {
-                            canvasView?.updateAutoAim(cueBallPos, aimAngleRad, powerPercent, targetBallPos, matchDetected, tableBounds, isAiming)
+                            canvasView?.updateAutoAim(
+                                cue = cueBallPos,
+                                angleRad = aimAngleRad,
+                                power = powerPercent,
+                                target = targetBallPos,
+                                allBalls = allBalls,
+                                spinX = spinX,
+                                spinY = spinY,
+                                matchActive = matchDetected,
+                                detectedBounds = tableBounds,
+                                isAiming = isAiming
+                            )
                         }
 
                         override fun onMatchStateChanged(isMatch: Boolean) {
