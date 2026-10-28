@@ -94,7 +94,7 @@ object MultiBallSimulator {
         val cueSpeed = maxSpeed * (0.30f + 0.70f * safePower)
 
         val initDirX = cos(aimAngleRad.toDouble()).toFloat()
-        val initDirY = (-sin(aimAngleRad.toDouble())).toFloat()
+        val initDirY = sin(aimAngleRad.toDouble()).toFloat()
 
         // 2. Initialize Cue Ball
         val simBalls = mutableListOf<SimBall>()
@@ -114,10 +114,16 @@ object MultiBallSimulator {
 
         // 3. Initialize Object Balls (Filter out any invalid or overlapping with cue)
         val minCueDistSq = (ballRadius * 1.5f) * (ballRadius * 1.5f)
+        val margin = ballRadius * 3.0f
+        val validLeft = tableBounds.left - margin
+        val validRight = tableBounds.right + margin
+        val validTop = tableBounds.top - margin
+        val validBottom = tableBounds.bottom + margin
+
         var objIdCounter = 1
         for (ob in objectBalls) {
             val dCueSq = (ob.x - cuePos.x) * (ob.x - cuePos.x) + (ob.y - cuePos.y) * (ob.y - cuePos.y)
-            if (dCueSq > minCueDistSq && tableBounds.contains(ob.x, ob.y)) {
+            if (dCueSq > minCueDistSq && ob.x in validLeft..validRight && ob.y in validTop..validBottom) {
                 val ball = SimBall(
                     id = objIdCounter++,
                     x = ob.x,
@@ -193,14 +199,14 @@ object MultiBallSimulator {
                             ball.x = effLeft
                             ball.vx = -ball.vx * cushionDamping
                             if (ball.isCue && enableSpinPhysics) {
-                                ball.vy += ball.spinX * 0.18f * abs(ball.vx)
+                                ball.vy -= ball.spinX * 0.20f * abs(ball.vx)
                             }
                             ball.recordPoint(ball.x, ball.y, force = true)
                         } else if (ball.x >= effRight && ball.vx > 0f) {
                             ball.x = effRight
                             ball.vx = -ball.vx * cushionDamping
                             if (ball.isCue && enableSpinPhysics) {
-                                ball.vy -= ball.spinX * 0.18f * abs(ball.vx)
+                                ball.vy += ball.spinX * 0.20f * abs(ball.vx)
                             }
                             ball.recordPoint(ball.x, ball.y, force = true)
                         }
@@ -209,14 +215,14 @@ object MultiBallSimulator {
                             ball.y = effTop
                             ball.vy = -ball.vy * cushionDamping
                             if (ball.isCue && enableSpinPhysics) {
-                                ball.vx -= ball.spinX * 0.18f * abs(ball.vy)
+                                ball.vx += ball.spinX * 0.20f * abs(ball.vy)
                             }
                             ball.recordPoint(ball.x, ball.y, force = true)
                         } else if (ball.y >= effBottom && ball.vy > 0f) {
                             ball.y = effBottom
                             ball.vy = -ball.vy * cushionDamping
                             if (ball.isCue && enableSpinPhysics) {
-                                ball.vx += ball.spinX * 0.18f * abs(ball.vy)
+                                ball.vx -= ball.spinX * 0.20f * abs(ball.vy)
                             }
                             ball.recordPoint(ball.x, ball.y, force = true)
                         }
@@ -324,9 +330,12 @@ object MultiBallSimulator {
         // 6. Assemble Result Paths
         val activePaths = mutableListOf<BallTrajectoryPath>()
         for (ball in simBalls) {
-            if (ball.totalDistMoved > ballRadius * 0.35f || ball.isCue) {
+            if (ball.totalDistMoved > ballRadius * 0.15f || ball.isCue) {
                 // Ensure final stop point is recorded
                 ball.recordPoint(ball.x, ball.y, force = true)
+                if (ball.points.size < 2) {
+                    ball.points.add(TrajectoryPoint(ball.x, ball.y))
+                }
 
                 activePaths.add(
                     BallTrajectoryPath(

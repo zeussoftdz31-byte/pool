@@ -614,12 +614,6 @@ class AimCanvasView(context: Context) : View(context) {
         // Master Switch: Stop drawing if disabled
         if (!isMasterOverlayEnabled) return
 
-        // CRITICAL: DO NOT DRAW LINES OR POCKETS UNLESS A MATCH IS ACTIVE!
-        // Outside of a live match (in lobby, phone launcher, rewards), draw NOTHING!
-        if (!isMatchDetected && !isCalibrationModeActive) {
-            return
-        }
-
         // Interactive Calibration Mode (Setup Mode)
         if (isCalibrationModeActive) {
             drawCalibrationOverlay(canvas)
@@ -631,11 +625,6 @@ class AimCanvasView(context: Context) : View(context) {
                 canvas.drawCircle(p.x, p.y, 4f, pocketMarkerPaint)
             }
             return // During setup, only display table calibration guides!
-        }
-
-        // PLAY MODE: Lines appear when the game's white line emerges from cue stick, or in Manual Ring Mode!
-        if (!isAimingActive && !isManualRingMode) {
-            return
         }
 
         // 1. Draw Table Cushions (Rails where bank shots bounce!)
