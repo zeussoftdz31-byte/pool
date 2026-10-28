@@ -608,6 +608,7 @@ class AimOverlayService : Service(), SensorEventListener {
                 override fun onProgressChanged(sb: SeekBar?, progress: Int, fromUser: Boolean) {
                     val p = (progress / 100f).coerceIn(0.15f, 1.0f)
                     tvAimPowerVal?.text = String.format("%.2f", p)
+                    canvasView?.userSelectedPower = p
                     canvasView?.shotPowerPercent = p
                     canvasView?.postInvalidate()
                 }

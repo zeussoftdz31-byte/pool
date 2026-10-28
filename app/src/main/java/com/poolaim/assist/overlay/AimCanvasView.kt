@@ -8,6 +8,7 @@ import com.poolaim.assist.R
 import com.poolaim.assist.AppSettings
 import com.poolaim.assist.physics.BallTrajectory
 import com.poolaim.assist.physics.LineIntersection
+import com.poolaim.assist.physics.MultiBallSimulator
 import com.poolaim.assist.physics.Vector2D
 import kotlin.math.*
 
@@ -36,6 +37,7 @@ class AimCanvasView(context: Context) : View(context) {
     var cueBallPos = Vector2D(500f, 500f)
     var aimAngleRad = 0f
     var shotPowerPercent = 0.85f
+    var userSelectedPower: Float? = null
     var targetBallPos: Vector2D? = null
 
     // Multi-Ball Collision & Spin State
@@ -157,6 +159,20 @@ class AimCanvasView(context: Context) : View(context) {
     private val comboStopMarkerPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = Color.parseColor("#FF9100")
         strokeWidth = 4f
+        style = Paint.Style.STROKE
+    }
+
+    private val tertiaryTrajectoryPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = Color.parseColor("#E040FB") // Vivid Neon Magenta / Purple
+        strokeWidth = 3.5f
+        style = Paint.Style.STROKE
+        strokeCap = Paint.Cap.ROUND
+        pathEffect = DashPathEffect(floatArrayOf(10f, 8f), 0f)
+    }
+
+    private val tertiaryStopMarkerPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = Color.parseColor("#E040FB")
+        strokeWidth = 3.5f
         style = Paint.Style.STROKE
     }
 
@@ -503,7 +519,11 @@ class AimCanvasView(context: Context) : View(context) {
         isAutoAimActive = true
         cueBallPos = cue
         aimAngleRad = angleRad
-        shotPowerPercent = power
+        if (userSelectedPower != null && abs(power - 0.85f) < 0.08f) {
+            shotPowerPercent = userSelectedPower!!
+        } else {
+            shotPowerPercent = power
+        }
         targetBallPos = target
         postInvalidate()
     }
@@ -631,270 +651,90 @@ class AimCanvasView(context: Context) : View(context) {
             canvas.drawCircle(p.x, p.y, 4f, pocketMarkerPaint)
         }
 
-        val dirX = cos(aimAngleRad.toDouble()).toFloat()
-        val dirY = sin(aimAngleRad.toDouble()).toFloat()
+        // =========================================================================
+        // REAL-TIME MULTI-BODY BILLIARDS SIMULATOR
+        // Simulates Cue Ball, Primary Object Ball, Secondary Combo (Carom),
+        // Tertiary balls, felt friction, spin follow/draw/throw, and cushion banks.
+        // =========================================================================
+        val simResult = MultiBallSimulator.simulate(
+            cuePos = cueBallPos,
+            aimAngleRad = aimAngleRad,
+            powerPercent = shotPowerPercent,
+            spinX = currentSpinX,
+            spinY = currentSpinY,
+            objectBalls = allDetectedBalls,
+            tableBounds = tableBounds,
+            ballRadius = ballRadius,
+            pockets = pockets,
+            pocketScale = pocketScale,
+            enableBankShots = enableBankShots,
+            enableComboShots = enableComboShots,
+            enableSpinPhysics = enableSpinPhysics
+        )
 
-        var angleDeg = Math.toDegrees(atan2(-dirY.toDouble(), dirX.toDouble())).toFloat()
-        if (angleDeg < 0f) angleDeg += 360f
+        // Render each active ball's simulated trajectory
+        for (path in simResult.activePaths) {
+            if (path.points.size < 2) continue
 
-        // Calculate available travel distance based on cue pull power (Wizard Pool 8 mechanics)
-        val tableWidth = tableBounds.width()
-        val totalDistance = if (enablePowerSimulation) {
-            tableWidth * (0.30f + 2.70f * shotPowerPercent.toDouble().pow(1.35).toFloat())
-        } else {
-            tableWidth * 3.5f // Full table length
-        }
-
-        val target = targetBallPos
-        var isTargetHit = false
-        var ghostX = 0f
-        var ghostY = 0f
-        var ghostDist = 0f
-        var exitDx = 0f
-        var exitDy = 0f
-        var exitLen = 0.001f
-        var exitAngleDeg = 0f
-        var targetDistance = 0f
-        var cueDeflectionDistance = 0f
-
-        if (target != null) {
-            val deltaX = target.x - cueBallPos.x
-            val deltaY = target.y - cueBallPos.y
-            val proj = deltaX * dirX + deltaY * dirY
-
-            val twoR = ballRadius * 2.0f
-            val twoRSq = twoR * twoR
-            val distSq = deltaX * deltaX + deltaY * deltaY
-            val perpSq = max(0f, distSq - proj * proj)
-
-            // Exact mathematical condition for cue ball colliding with target ball along ray
-            if (proj > ballRadius * 0.4f && perpSq <= twoRSq) {
-                isTargetHit = true
-                ghostDist = max(0f, proj - sqrt(twoRSq - perpSq))
-                ghostX = cueBallPos.x + dirX * ghostDist
-                ghostY = cueBallPos.y + dirY * ghostDist
-
-                // Vector from ghost ball center to target ball center at impact
-                exitDx = target.x - ghostX
-                exitDy = target.y - ghostY
-                exitLen = max(0.001f, hypot(exitDx, exitDy))
-
-                exitAngleDeg = Math.toDegrees(atan2(-exitDy.toDouble(), exitDx.toDouble())).toFloat()
-                if (exitAngleDeg < 0f) exitAngleDeg += 360f
-
-                // Cut Angle & Momentum Transfer:
-                // Dot product between cue incoming vector and exit vector gives cos(cutAngle)
-                val cosCut = ((dirX * exitDx + dirY * exitDy) / exitLen).coerceIn(0f, 1f)
-                val sinCut = sqrt(max(0f, 1f - cosCut * cosCut))
-
-                // Energy distributed between target ball and cue ball deflection
-                val targetEnergyRatio = cosCut * cosCut
-                val cueEnergyRatio = sinCut * sinCut
-
-                val remainingEnergyDist = max(0f, totalDistance - ghostDist)
-                targetDistance = remainingEnergyDist * targetEnergyRatio
-                cueDeflectionDistance = remainingEnergyDist * cueEnergyRatio
-            }
-        }
-
-        if (isTargetHit && target != null) {
-            // ========================================================
-            // SCENARIO A: Target Ball is Hit along Aim Line
-            // ========================================================
-
-            // Draw line from cue ball to ghost ball
-            canvas.drawLine(cueBallPos.x, cueBallPos.y, ghostX, ghostY, directAimPaint)
-            canvas.drawCircle(ghostX, ghostY, ballRadius, ghostBallPaint)
-
-            val maxBounces = if (enableBankShots) 4 else 0
-
-            val otherBallsForTarget = if (enableComboShots) {
-                allDetectedBalls.filter { hypot(it.x - target.x, it.y - target.y) > ballRadius * 1.5f }
-            } else {
-                emptyList()
+            // Select distinctive color per ball role
+            val linePaint = when (path.roleOrder) {
+                0 -> directAimPaint // Cue Ball: Vivid Neon Cyan
+                1 -> targetTrajectoryPaint // Primary Hit Ball: Vivid Neon Green
+                2 -> comboTrajectoryPaint // Secondary Combo Ball: Vivid Neon Amber / Orange
+                else -> tertiaryTrajectoryPaint // Tertiary / Scatter: Vivid Neon Magenta / Purple
             }
 
-            // 1. Trace & Render Target Ball Trajectory (With Multi-Ball Collision & Side Spin)
-            val targetTrajectory = LineIntersection.traceBallPath(
-                startX = target.x,
-                startY = target.y,
-                angleDeg = exitAngleDeg,
-                totalDistance = targetDistance,
-                maxBounces = maxBounces,
-                tableLeft = tableBounds.left,
-                tableTop = tableBounds.top,
-                tableRight = tableBounds.right,
-                tableBottom = tableBounds.bottom,
-                ballRadius = ballRadius,
-                pockets = pockets,
-                pocketScale = pocketScale,
-                otherBalls = otherBallsForTarget,
-                sideSpin = currentSpinX
-            )
-
-            // Render Target Ball Segments
-            for ((idx, seg) in targetTrajectory.segments.withIndex()) {
-                val paint = when (idx) {
-                    0 -> targetTrajectoryPaint
-                    1 -> firstBankPaint
-                    else -> secondBankPaint
-                }
-                canvas.drawLine(seg.startX, seg.startY, seg.endX, seg.endY, paint)
+            val stopPaint = when (path.roleOrder) {
+                0 -> cueStopMarkerPaint
+                1 -> targetStopMarkerPaint
+                2 -> comboStopMarkerPaint
+                else -> tertiaryStopMarkerPaint
             }
 
-            // Render Combo Collision (إذا اصطدمت الكرة الهدف بكرة ثانية على الطاولة)
-            targetTrajectory.comboCollision?.let { combo ->
-                // Draw second ghost ball at secondary collision
-                canvas.drawCircle(combo.ghostBallPos.x, combo.ghostBallPos.y, ballRadius, comboGhostBallPaint)
-
-                // Draw secondary ball trajectory towards pocket or cushion
-                for (seg in combo.secondBallTrajectory.segments) {
-                    canvas.drawLine(seg.startX, seg.startY, seg.endX, seg.endY, comboTrajectoryPaint)
-                }
-
-                // Render secondary ball stopping circle or pocket pot
-                if (!combo.secondBallTrajectory.pottedInPocket) {
-                    canvas.drawCircle(combo.secondBallTrajectory.stopX, combo.secondBallTrajectory.stopY, ballRadius, comboStopMarkerPaint)
-                    canvas.drawCircle(combo.secondBallTrajectory.stopX, combo.secondBallTrajectory.stopY, 4f, comboStopMarkerPaint)
-                } else if (enablePocketGlow) {
-                    val p = pockets[combo.secondBallTrajectory.pocketIndex]
-                    canvas.drawCircle(p.x, p.y, ballRadius * 1.7f * pocketScale, comboStopMarkerPaint)
-                }
+            // 1. Draw multi-segment trajectory path
+            for (i in 0 until path.points.size - 1) {
+                val p1 = path.points[i]
+                val p2 = path.points[i + 1]
+                canvas.drawLine(p1.x, p1.y, p2.x, p2.y, linePaint)
             }
 
-            // Render Target Ball Stop Circle (موقع توقف كرة الهدف)
-            if (!targetTrajectory.pottedInPocket) {
-                canvas.drawCircle(targetTrajectory.stopX, targetTrajectory.stopY, ballRadius, targetStopMarkerPaint)
-                stopCenterDotPaint.color = targetTrajectoryPaint.color
-                canvas.drawCircle(targetTrajectory.stopX, targetTrajectory.stopY, 4f, stopCenterDotPaint)
-
-                // Outer halo stopping ring
-                stopGlowRingPaint.color = targetTrajectoryPaint.color
-                canvas.drawCircle(targetTrajectory.stopX, targetTrajectory.stopY, ballRadius * 1.35f, stopGlowRingPaint)
-            } else if (enablePocketGlow) {
-                // Neon Double Ring Glow on potted pocket
-                val p = pockets[targetTrajectory.pocketIndex]
-                canvas.drawCircle(p.x, p.y, ballRadius * 1.6f * pocketScale, pocketGlowPaint)
-                canvas.drawCircle(p.x, p.y, ballRadius * 2.3f * pocketScale, pocketGlowPaint)
+            // 2. Draw ghost balls at all collision impact points
+            for (g in path.ghosts) {
+                val gPaint = if (path.roleOrder <= 1) ghostBallPaint else comboGhostBallPaint
+                canvas.drawCircle(g.x, g.y, ballRadius, gPaint)
             }
 
-            // 2. Trace & Render Cue Ball Tangent Deflection with Vertical Spin (Top Spin / Back Spin)
-            if (enableCueBallPath && cueDeflectionDistance > 10f) {
-                val perpX = -exitDy / exitLen
-                val perpY = exitDx / exitLen
-
-                val dot = dirX * perpX + dirY * perpY
-                val sign = if (dot >= 0) 1f else -1f
-                var tanDx = perpX * sign
-                var tanDy = perpY * sign
-
-                // Apply Spin physics to cue ball post-impact deflection:
-                // currentSpinY: -1.0 (Top Spin / Follow), +1.0 (Back Spin / Draw)
-                if (enableSpinPhysics) {
-                    if (currentSpinY < -0.05f) {
-                        // Top Spin / Follow: pushes forward along (dirX, dirY)
-                        val followFactor = (-currentSpinY) * 0.75f
-                        tanDx = tanDx * (1f - followFactor * 0.4f) + dirX * followFactor
-                        tanDy = tanDy * (1f - followFactor * 0.4f) + dirY * followFactor
-                    } else if (currentSpinY > 0.05f) {
-                        // Back Spin / Draw: draws back against (dirX, dirY)
-                        val drawFactor = currentSpinY * 0.85f
-                        tanDx = tanDx * (1f - drawFactor * 0.5f) - dirX * drawFactor
-                        tanDy = tanDy * (1f - drawFactor * 0.5f) - dirY * drawFactor
+            // 3. Draw final resting stop position or pocket entry
+            if (path.isPotted) {
+                if (enablePocketGlow && path.potIndex in pockets.indices) {
+                    val p = pockets[path.potIndex]
+                    if (path.isCueBall) {
+                        // SCRATCH WARNING: Red alert on potted pocket
+                        canvas.drawCircle(p.x, p.y, ballRadius * 1.8f * pocketScale, scratchWarningPaint)
+                        canvas.drawCircle(p.x, p.y, ballRadius * 2.5f * pocketScale, scratchWarningPaint)
+                        canvas.drawLine(p.x - 14f, p.y - 14f, p.x + 14f, p.y + 14f, scratchWarningPaint)
+                        canvas.drawLine(p.x - 14f, p.y + 14f, p.x + 14f, p.y - 14f, scratchWarningPaint)
+                    } else {
+                        // Safe ball pot: double glowing rings
+                        canvas.drawCircle(p.x, p.y, ballRadius * 1.6f * pocketScale, pocketGlowPaint)
+                        canvas.drawCircle(p.x, p.y, ballRadius * 2.3f * pocketScale, pocketGlowPaint)
                     }
                 }
+            } else {
+                // Stopped on table: draw stop circle + center dot + glowing halo ring
+                canvas.drawCircle(path.stopX, path.stopY, ballRadius, stopPaint)
+                stopCenterDotPaint.color = linePaint.color
+                canvas.drawCircle(path.stopX, path.stopY, 4f, stopCenterDotPaint)
 
-                var tanAngleDeg = Math.toDegrees(atan2(-tanDy.toDouble(), tanDx.toDouble())).toFloat()
-                if (tanAngleDeg < 0f) tanAngleDeg += 360f
-
-                val cueTrajectory = LineIntersection.traceBallPath(
-                    startX = ghostX,
-                    startY = ghostY,
-                    angleDeg = tanAngleDeg,
-                    totalDistance = cueDeflectionDistance,
-                    maxBounces = if (enableBankShots) 3 else 0,
-                    tableLeft = tableBounds.left,
-                    tableTop = tableBounds.top,
-                    tableRight = tableBounds.right,
-                    tableBottom = tableBounds.bottom,
-                    ballRadius = ballRadius,
-                    pockets = pockets,
-                    pocketScale = pocketScale,
-                    otherBalls = emptyList(),
-                    sideSpin = currentSpinX
-                )
-
-                for (seg in cueTrajectory.segments) {
-                    canvas.drawLine(seg.startX, seg.startY, seg.endX, seg.endY, cueTangentPaint)
-                }
-
-                // Render Cue Ball Stop Circle (موقع توقف الكرة البيضاء)
-                if (!cueTrajectory.pottedInPocket) {
-                    canvas.drawCircle(cueTrajectory.stopX, cueTrajectory.stopY, ballRadius, cueStopMarkerPaint)
-                    stopCenterDotPaint.color = Color.WHITE
-                    canvas.drawCircle(cueTrajectory.stopX, cueTrajectory.stopY, 4f, stopCenterDotPaint)
-
-                    stopGlowRingPaint.color = Color.WHITE
-                    canvas.drawCircle(cueTrajectory.stopX, cueTrajectory.stopY, ballRadius * 1.35f, stopGlowRingPaint)
-                } else {
-                    // SCRATCH WARNING: Cue ball enters pocket! Show RED alert!
-                    val p = pockets[cueTrajectory.pocketIndex]
-                    canvas.drawCircle(p.x, p.y, ballRadius * 1.8f * pocketScale, scratchWarningPaint)
-                    canvas.drawCircle(p.x, p.y, ballRadius * 2.5f * pocketScale, scratchWarningPaint)
-                    canvas.drawLine(p.x - 14f, p.y - 14f, p.x + 14f, p.y + 14f, scratchWarningPaint)
-                    canvas.drawLine(p.x - 14f, p.y + 14f, p.x + 14f, p.y - 14f, scratchWarningPaint)
-                }
+                stopGlowRingPaint.color = linePaint.color
+                canvas.drawCircle(path.stopX, path.stopY, ballRadius * 1.35f, stopGlowRingPaint)
             }
+        }
 
-            // Optional 6-Pocket Guide Lines
-            if (showPocketGuides) {
-                for (p in pockets) {
-                    canvas.drawLine(target.x, target.y, p.x, p.y, pocketGuidePaint)
-                }
-            }
-
-        } else {
-            // ========================================================
-            // SCENARIO B: Direct Bank Shot (Cue Ball directly to Cushion)
-            // ========================================================
-
-            val maxBounces = if (enableBankShots) 4 else 0
-
-            val cueDirectTrajectory = LineIntersection.traceBallPath(
-                startX = cueBallPos.x,
-                startY = cueBallPos.y,
-                angleDeg = angleDeg,
-                totalDistance = totalDistance,
-                maxBounces = maxBounces,
-                tableLeft = tableBounds.left,
-                tableTop = tableBounds.top,
-                tableRight = tableBounds.right,
-                tableBottom = tableBounds.bottom,
-                ballRadius = ballRadius,
-                pockets = pockets,
-                pocketScale = pocketScale,
-                otherBalls = if (enableComboShots) allDetectedBalls else emptyList(),
-                sideSpin = currentSpinX
-            )
-
-            for ((idx, seg) in cueDirectTrajectory.segments.withIndex()) {
-                val paint = when (idx) {
-                    0 -> directAimPaint
-                    1 -> firstBankPaint
-                    else -> secondBankPaint
-                }
-                canvas.drawLine(seg.startX, seg.startY, seg.endX, seg.endY, paint)
-            }
-
-            // Cue Ball Stopping Circle
-            if (!cueDirectTrajectory.pottedInPocket) {
-                canvas.drawCircle(cueDirectTrajectory.stopX, cueDirectTrajectory.stopY, ballRadius, cueStopMarkerPaint)
-                stopCenterDotPaint.color = Color.WHITE
-                canvas.drawCircle(cueDirectTrajectory.stopX, cueDirectTrajectory.stopY, 4f, stopCenterDotPaint)
-            } else if (enablePocketGlow) {
-                val p = pockets[cueDirectTrajectory.pocketIndex]
-                canvas.drawCircle(p.x, p.y, ballRadius * 1.6f * pocketScale, pocketGlowPaint)
-                canvas.drawCircle(p.x, p.y, ballRadius * 2.3f * pocketScale, pocketGlowPaint)
+        // Optional 6-Pocket Guide Lines
+        if (showPocketGuides && targetBallPos != null) {
+            for (p in pockets) {
+                canvas.drawLine(targetBallPos!!.x, targetBallPos!!.y, p.x, p.y, pocketGuidePaint)
             }
         }
 
