@@ -445,66 +445,6 @@ class AimOverlayService : Service(), SensorEventListener {
                 canvasView?.enableCueBallPath = isChecked
                 canvasView?.postInvalidate()
             }
-
-            // Cue Force Controls (Aiming Master Style)
-            val appSettings = AppSettings.get(this)
-            val tvCueForceVal = modMenuView?.findViewById<TextView>(R.id.tvCueForceVal)
-            val seekCueForce = modMenuView?.findViewById<SeekBar>(R.id.seekCueForce)
-            val btnCueForceMinus = modMenuView?.findViewById<View>(R.id.btnCueForceMinus)
-            val btnCueForcePlus = modMenuView?.findViewById<View>(R.id.btnCueForcePlus)
-
-            fun updateCueForceDisplay(force: Int) {
-                val clamped = force.coerceIn(0, 11)
-                tvCueForceVal?.text = "Force $clamped"
-                seekCueForce?.progress = clamped
-                canvasView?.cueForceLevel = clamped
-                appSettings.cueForceLevel = clamped
-                canvasView?.postInvalidate()
-            }
-
-            val savedForce = appSettings.cueForceLevel
-            updateCueForceDisplay(savedForce)
-
-            seekCueForce?.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
-                override fun onProgressChanged(sb: SeekBar?, progress: Int, fromUser: Boolean) {
-                    if (fromUser) {
-                        updateCueForceDisplay(progress)
-                    }
-                }
-                override fun onStartTrackingTouch(sb: SeekBar?) {}
-                override fun onStopTrackingTouch(sb: SeekBar?) {}
-            })
-
-            btnCueForceMinus?.setOnClickListener {
-                updateCueForceDisplay((seekCueForce?.progress ?: 11) - 1)
-            }
-
-            btnCueForcePlus?.setOnClickListener {
-                updateCueForceDisplay((seekCueForce?.progress ?: 11) + 1)
-            }
-
-            val initialPower = canvasView?.shotPowerPercent ?: 0.85f
-            seekAimPower?.progress = (initialPower * 100).toInt()
-            tvAimPowerVal?.text = String.format("%.2f", initialPower)
-
-            seekAimPower?.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
-                override fun onProgressChanged(sb: SeekBar?, progress: Int, fromUser: Boolean) {
-                    val p = (progress / 100f).coerceIn(0.15f, 1.0f)
-                    tvAimPowerVal?.text = String.format("%.2f", p)
-                    canvasView?.userSelectedPower = p
-                    canvasView?.shotPowerPercent = p
-                    canvasView?.postInvalidate()
-                }
-                override fun onStartTrackingTouch(sb: SeekBar?) {}
-                override fun onStopTrackingTouch(sb: SeekBar?) {}
-            })
-
-            // ========================================================
-            // TAB 3: SETTINGS & EXIT
-            // ========================================================
-            val btnCloseMod = modMenuView?.findViewById<View>(R.id.btnCloseMod)
-            btnCloseMod?.setOnClickListener { stopSelf() }
-
             windowManager.addView(modMenuView, params)
         } catch (e: Exception) {
             e.printStackTrace()
