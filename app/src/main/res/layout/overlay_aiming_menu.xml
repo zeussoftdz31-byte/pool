@@ -1,0 +1,128 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/rootFloatingMenu"
+    android:layout_width="280dp"
+    android:layout_height="wrap_content"
+    android:background="@drawable/bg_menu_dark"
+    android:orientation="vertical"
+    android:padding="16dp">
+
+    <!-- Header -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center_vertical"
+        android:orientation="horizontal">
+
+        <TextView
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="🎯 AIMING MASTER PRO"
+            android:textColor="#22C55E"
+            android:textSize="15sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/btnCloseMenu"
+            android:layout_width="32dp"
+            android:layout_height="32dp"
+            android:gravity="center"
+            android:text="✕"
+            android:textColor="#9CA3AF"
+            android:textSize="18sp" />
+    </LinearLayout>
+
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="1dp"
+        android:layout_marginTop="8dp"
+        android:layout_marginBottom="12dp"
+        android:background="#334155" />
+
+    <!-- Guideline switch -->
+    <androidx.appcompat.widget.SwitchCompat
+        android:id="@+id/switchMenuGuideline"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:paddingVertical="4dp"
+        android:text="عرض خطوط التوقع (Laser Lines)"
+        android:textColor="#FFFFFF"
+        android:textSize="13sp" />
+
+    <!-- Cushion bounce switch -->
+    <androidx.appcompat.widget.SwitchCompat
+        android:id="@+id/switchMenuCushion"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:paddingVertical="4dp"
+        android:text="ارتداد الحواف (Bank Shots)"
+        android:textColor="#FFFFFF"
+        android:textSize="13sp" />
+
+    <!-- 3-Lines Pro switch -->
+    <androidx.appcompat.widget.SwitchCompat
+        android:id="@+id/switchMenuThreeLine"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:paddingVertical="4dp"
+        android:text="وضع 3-Lines Pro والانحراف"
+        android:textColor="#FFFFFF"
+        android:textSize="13sp" />
+
+    <!-- Interactive On-Screen Handles switch -->
+    <androidx.appcompat.widget.SwitchCompat
+        android:id="@+id/switchInteractiveHandles"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:paddingVertical="4dp"
+        android:text="مقابض تحريك الكرات باللمس"
+        android:textColor="#F59E0B"
+        android:textSize="13sp" />
+
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="1dp"
+        android:layout_marginTop="8dp"
+        android:layout_marginBottom="8dp"
+        android:background="#334155" />
+
+    <!-- Cue force row -->
+    <LinearLayout
+        android:id="@+id/rowMenuForce"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingVertical="6dp">
+
+        <TextView
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="قوة العصا (Cue Force)"
+            android:textColor="#E2E8F0"
+            android:textSize="13sp" />
+
+        <TextView
+            android:id="@+id/tvMenuForceVal"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Force 5"
+            android:textColor="#22C55E"
+            android:textSize="13sp"
+            android:textStyle="bold" />
+    </LinearLayout>
+
+    <!-- Close button -->
+    <Button
+        android:id="@+id/btnMenuHide"
+        android:layout_width="match_parent"
+        android:layout_height="38dp"
+        android:layout_marginTop="10dp"
+        android:backgroundTint="#334155"
+        android:text="إغلاق القائمة"
+        android:textColor="#FFFFFF"
+        android:textSize="12sp" />
+
+</LinearLayout>

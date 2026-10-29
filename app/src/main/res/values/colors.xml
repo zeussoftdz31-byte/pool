@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="bg_dark">#121418</color>
+    <color name="card_dark">#1B1E24</color>
+    <color name="card_stroke">#2A2F3A</color>
+    <color name="am_green">#22C55E</color>
+    <color name="am_green_pressed">#16A34A</color>
+    <color name="am_red">#EF4444</color>
+    <color name="am_blue">#3B82F6</color>
+    <color name="am_gold">#F59E0B</color>
+    <color name="text_primary">#FFFFFF</color>
+    <color name="text_secondary">#9CA3AF</color>
+</resources>

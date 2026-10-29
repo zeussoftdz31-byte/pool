@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/rootFloatingBall"
+    android:layout_width="56dp"
+    android:layout_height="56dp"
+    android:background="@drawable/bg_ball_8"
+    android:clickable="true"
+    android:focusable="false">
+
+    <!-- Center White 8 Circle -->
+    <TextView
+        android:id="@+id/tvBallNumber"
+        android:layout_width="24dp"
+        android:layout_height="24dp"
+        android:layout_gravity="center"
+        android:background="@drawable/shape_white_circle"
+        android:gravity="center"
+        android:text="8"
+        android:textColor="#111111"
+        android:textSize="13sp"
+        android:textStyle="bold" />
+
+    <!-- Green Status Badge -->
+    <View
+        android:id="@+id/badgeStatus"
+        android:layout_width="14dp"
+        android:layout_height="14dp"
+        android:layout_gravity="bottom|end"
+        android:layout_marginEnd="3dp"
+        android:layout_marginBottom="3dp"
+        android:background="@drawable/shape_am_check" />
+
+</FrameLayout>
